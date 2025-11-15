@@ -1,0 +1,444 @@
+using UnityEngine;
+using System.Collections.Generic;
+using System;
+
+public class TimelineController : MonoBehaviour
+{
+    [Header("Timeline Range")]
+    [SerializeField, Tooltip("How far back in time the timeline extends (in months)")]
+    private float timelineRangeMonths = 14f;
+    
+    [Header("Arc Configuration")]
+    [SerializeField, Tooltip("Radius of the curved timeline arc")]
+    private float arcRadius = 1.5f;
+    
+    [SerializeField, Tooltip("Arc coverage in degrees (120 = 120 degree arc)")]
+    private float arcDegrees = 120f;
+    
+    [SerializeField, Tooltip("Offset from head position")]
+    private Vector3 arcOffset = new Vector3(0f, -0.3f, 0.5f);
+    
+    [Header("Zoom Configuration")]
+    [SerializeField, Tooltip("Minimum visible time range in seconds (max zoom in)")]
+    private float minVisibleSeconds = 60f; // 1 minute
+    
+    [SerializeField, Tooltip("Reference to the hand pinch manager")]
+    private HandPinchInteractionManager pinchManager;
+    
+    [Header("Tick Configuration")]
+    [SerializeField, Tooltip("Prefab for timeline ticks (should use GPU instancing material)")]
+    private GameObject tickPrefab;
+    
+    [SerializeField, Tooltip("Target number of visible ticks at any time")]
+    private int targetTickCount = 200;
+    
+    [SerializeField, Tooltip("Material for instanced rendering")]
+    private Material instancedMaterial;
+    
+    [Header("Debug")]
+    [SerializeField] private bool enableDebugLogs = true;
+    
+    // Tick level definitions
+    private TickLevel[] tickLevels;
+    
+    // Timeline state
+    private DateTime timelineStart; // NOW
+    private DateTime timelineEnd;   // 14 months ago
+    private double totalTimelineSeconds;
+    
+    // Current view state
+    private double currentScrollTime; // Time offset in seconds
+    private double currentVisibleSeconds; // How many seconds are visible
+    
+    // Instancing data
+    private Dictionary<int, List<Matrix4x4>> tickMatricesByLevel;
+    private Dictionary<int, MaterialPropertyBlock> propertyBlocksByLevel;
+    
+    // For future event markers
+    public delegate void OnTimelineUpdated(DateTime visibleStart, DateTime visibleEnd, double zoomLevel);
+    public event OnTimelineUpdated TimelineUpdated;
+    
+    [System.Serializable]
+    private class TickLevel
+    {
+        public string name;
+        public int level; // 0-8
+        public double intervalSeconds;
+        public float scale; // Visual scale multiplier
+        public Color color; // For future differentiation
+        
+        public TickLevel(string name, int level, double intervalSeconds, float scale)
+        {
+            this.name = name;
+            this.level = level;
+            this.intervalSeconds = intervalSeconds;
+            this.scale = scale;
+            this.color = Color.white;
+        }
+    }
+    
+    void Start()
+    {
+        InitializeTimeline();
+        InitializeTickLevels();
+        
+        if (pinchManager == null)
+        {
+            Debug.LogError("HandPinchInteractionManager not assigned!");
+        }
+        
+        tickMatricesByLevel = new Dictionary<int, List<Matrix4x4>>();
+        propertyBlocksByLevel = new Dictionary<int, MaterialPropertyBlock>();
+        
+        DebugLog("Timeline initialized");
+    }
+    
+    void InitializeTimeline()
+    {
+        timelineStart = DateTime.Now;
+        timelineEnd = timelineStart.AddMonths(-(int)timelineRangeMonths);
+        totalTimelineSeconds = (timelineStart - timelineEnd).TotalSeconds;
+        
+        // Initialize view to show full timeline
+        currentScrollTime = 0;
+        currentVisibleSeconds = totalTimelineSeconds;
+        
+        DebugLog($"Timeline range: {timelineEnd:yyyy-MM-dd HH:mm} to {timelineStart:yyyy-MM-dd HH:mm}");
+        DebugLog($"Total duration: {totalTimelineSeconds / 86400:F1} days");
+    }
+    
+    void InitializeTickLevels()
+    {
+        tickLevels = new TickLevel[]
+        {
+            new TickLevel("Second", 0, 1, 0.5f),
+            new TickLevel("10 Seconds", 1, 10, 0.6f),
+            new TickLevel("Minute", 2, 60, 0.8f),
+            new TickLevel("10 Minutes", 3, 600, 1.0f),
+            new TickLevel("Hour", 4, 3600, 1.2f),
+            new TickLevel("Day", 5, 86400, 1.5f),
+            new TickLevel("Week", 6, 604800, 1.8f),
+            new TickLevel("Month", 7, 2592000, 2.2f), // ~30 days
+            new TickLevel("Year", 8, 31536000, 3.0f)
+        };
+    }
+    
+    void Update()
+    {
+        if (pinchManager == null) return;
+        
+        UpdateTimelineFromInput();
+        UpdateTickPositions();
+        RenderTicks();
+    }
+    
+    void UpdateTimelineFromInput()
+    {
+        // Map zoom value (0.5 to 3) to visible time range
+        // 3.0 = minVisibleSeconds, 0.5 = totalTimelineSeconds
+        // Use inverse exponential mapping for smooth zoom
+        float zoomNormalized = Mathf.InverseLerp(0.5f, 3f, pinchManager.zoomValue);
+        currentVisibleSeconds = Mathf.Lerp(
+            (float)totalTimelineSeconds,
+            minVisibleSeconds,
+            Mathf.Pow(zoomNormalized, 2f) // Quadratic for finer control when zoomed in
+        );
+        
+        // Map scroll value (-10 to 10) to time offset
+        // -10 = view the end (oldest), +10 = view the start (newest/now)
+        float scrollNormalized = Mathf.InverseLerp(-10f, 10f, pinchManager.scrollValue);
+        
+        // Calculate the time range we can scroll through
+        double scrollableRange = totalTimelineSeconds - currentVisibleSeconds;
+        scrollableRange = Math.Max(0, scrollableRange);
+        
+        currentScrollTime = scrollableRange * (1.0 - scrollNormalized); // Inverted so right = now
+        
+        // Clamp to valid range
+        currentScrollTime = Math.Clamp(currentScrollTime, 0, scrollableRange);
+        
+        if (enableDebugLogs && Time.frameCount % 30 == 0) // Log every 30 frames
+        {
+            DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
+            DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
+            DebugLog($"View: {visibleStart:MM/dd HH:mm} to {visibleEnd:MM/dd HH:mm} | Range: {currentVisibleSeconds / 3600:F1}hrs | Zoom: {pinchManager.zoomValue:F2}");
+        }
+        
+        // Fire event for external systems
+        if (TimelineUpdated != null)
+        {
+            DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
+            DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
+            TimelineUpdated.Invoke(visibleStart, visibleEnd, currentVisibleSeconds);
+        }
+    }
+    
+    void UpdateTickPositions()
+    {
+        // Clear previous frame's data
+        foreach (var kvp in tickMatricesByLevel)
+        {
+            kvp.Value.Clear();
+        }
+        
+        // Determine which tick levels to show based on current zoom
+        List<int> visibleLevels = DetermineVisibleTickLevels();
+        
+        // Generate ticks for each visible level
+        foreach (int level in visibleLevels)
+        {
+            GenerateTicksForLevel(level);
+        }
+    }
+    
+    List<int> DetermineVisibleTickLevels()
+    {
+        List<int> visibleLevels = new List<int>();
+        
+        // Calculate how many ticks each level would produce
+        for (int i = 0; i < tickLevels.Length; i++)
+        {
+            double tickInterval = tickLevels[i].intervalSeconds;
+            int estimatedTickCount = (int)(currentVisibleSeconds / tickInterval);
+            
+            // Include level if it produces a reasonable number of ticks
+            // We want 2-3 levels visible for context
+            if (estimatedTickCount >= 3 && estimatedTickCount <= targetTickCount)
+            {
+                visibleLevels.Add(i);
+            }
+        }
+        
+        // Ensure we show at least 2 levels for context
+        if (visibleLevels.Count == 0)
+        {
+            // Find the level that's closest to our target tick count
+            int bestLevel = 0;
+            int bestDifference = int.MaxValue;
+            
+            for (int i = 0; i < tickLevels.Length; i++)
+            {
+                double tickInterval = tickLevels[i].intervalSeconds;
+                int estimatedTickCount = (int)(currentVisibleSeconds / tickInterval);
+                int difference = Mathf.Abs(estimatedTickCount - 20); // Target ~20 ticks
+                
+                if (difference < bestDifference)
+                {
+                    bestDifference = difference;
+                    bestLevel = i;
+                }
+            }
+            
+            visibleLevels.Add(bestLevel);
+            
+            // Add the level below and above for context if they exist
+            if (bestLevel > 0) visibleLevels.Add(bestLevel - 1);
+            if (bestLevel < tickLevels.Length - 1) visibleLevels.Add(bestLevel + 1);
+        }
+        
+        // Limit to max 3 levels for clarity
+        if (visibleLevels.Count > 3)
+        {
+            visibleLevels = visibleLevels.GetRange(0, 3);
+        }
+        
+        visibleLevels.Sort();
+        return visibleLevels;
+    }
+    
+    void GenerateTicksForLevel(int level)
+    {
+        if (!tickMatricesByLevel.ContainsKey(level))
+        {
+            tickMatricesByLevel[level] = new List<Matrix4x4>();
+        }
+        
+        TickLevel tickLevel = tickLevels[level];
+        double tickInterval = tickLevel.intervalSeconds;
+        
+        // Calculate visible time range
+        DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
+        DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
+        
+        // Find the first tick time (aligned to interval)
+        DateTime firstTick = AlignToInterval(visibleStart, tickInterval);
+        
+        // Generate ticks
+        DateTime currentTick = firstTick;
+        int tickCount = 0;
+        int maxTicks = targetTickCount; // Safety limit
+        
+        while (currentTick <= visibleEnd && tickCount < maxTicks)
+        {
+            // Calculate normalized position on timeline (0 = oldest, 1 = newest/now)
+            double timeSinceEnd = (currentTick - timelineEnd).TotalSeconds;
+            double normalizedTime = timeSinceEnd / totalTimelineSeconds;
+            
+            // Check if this tick is within the visible range
+            if (currentTick >= visibleStart && currentTick <= visibleEnd)
+            {
+                // Calculate position within visible range for arc placement
+                double visibleProgress = (currentTick - visibleStart).TotalSeconds / currentVisibleSeconds;
+                
+                // Convert to arc position
+                Vector3 tickPosition = CalculateArcPosition((float)visibleProgress);
+                Quaternion tickRotation = CalculateArcRotation((float)visibleProgress);
+                
+                // Scale based on level
+                Vector3 tickScale = Vector3.one * tickLevel.scale;
+                
+                // Create transformation matrix
+                Matrix4x4 matrix = Matrix4x4.TRS(tickPosition, tickRotation, tickScale);
+                tickMatricesByLevel[level].Add(matrix);
+                
+                tickCount++;
+            }
+            
+            // Move to next tick
+            currentTick = currentTick.AddSeconds(tickInterval);
+        }
+        
+        if (enableDebugLogs && Time.frameCount % 60 == 0)
+        {
+            DebugLog($"Level {level} ({tickLevel.name}): {tickCount} ticks");
+        }
+    }
+    
+    DateTime AlignToInterval(DateTime time, double intervalSeconds)
+    {
+        // Align to the nearest interval boundary before the given time
+        long ticks = time.Ticks;
+        long intervalTicks = (long)(intervalSeconds * TimeSpan.TicksPerSecond);
+        long alignedTicks = (ticks / intervalTicks) * intervalTicks;
+        return new DateTime(alignedTicks);
+    }
+    
+    Vector3 CalculateArcPosition(float progress)
+    {
+        // Progress: 0 = left edge of arc, 1 = right edge of arc
+        // Map to angle: -arcDegrees/2 to +arcDegrees/2
+        float angle = Mathf.Lerp(-arcDegrees / 2f, arcDegrees / 2f, progress);
+        float angleRad = angle * Mathf.Deg2Rad;
+        
+        // Calculate position on arc (XZ plane initially)
+        float x = Mathf.Sin(angleRad) * arcRadius;
+        float z = Mathf.Cos(angleRad) * arcRadius;
+        
+        // Apply offset and convert to local space
+        Vector3 localPosition = new Vector3(x, 0f, z) + arcOffset;
+        
+        // Convert to world space relative to this transform
+        return transform.TransformPoint(localPosition);
+    }
+    
+    Quaternion CalculateArcRotation(float progress)
+    {
+        // Calculate angle for this position
+        float angle = Mathf.Lerp(-arcDegrees / 2f, arcDegrees / 2f, progress);
+        
+        // Ticks should face toward the center of the arc
+        // Rotate to face inward
+        Quaternion localRotation = Quaternion.Euler(0f, -angle, 0f);
+        
+        // Convert to world space rotation
+        return transform.rotation * localRotation;
+    }
+    
+    void RenderTicks()
+    {
+        if (tickPrefab == null || instancedMaterial == null)
+        {
+            if (Time.frameCount % 120 == 0)
+                Debug.LogWarning("Tick prefab or instanced material not assigned!");
+            return;
+        }
+        
+        // Render each level using GPU instancing
+        foreach (var kvp in tickMatricesByLevel)
+        {
+            int level = kvp.Key;
+            List<Matrix4x4> matrices = kvp.Value;
+            
+            if (matrices.Count == 0) continue;
+            
+            // Get mesh from prefab
+            MeshFilter meshFilter = tickPrefab.GetComponent<MeshFilter>();
+            if (meshFilter == null || meshFilter.sharedMesh == null)
+            {
+                Debug.LogError("Tick prefab must have a MeshFilter with a mesh!");
+                continue;
+            }
+            
+            // Setup material property block (for future per-level customization)
+            if (!propertyBlocksByLevel.ContainsKey(level))
+            {
+                propertyBlocksByLevel[level] = new MaterialPropertyBlock();
+            }
+            
+            MaterialPropertyBlock props = propertyBlocksByLevel[level];
+            // Future: Set different colors per level
+            // props.SetColor("_Color", tickLevels[level].color);
+            
+            // Render using DrawMeshInstanced (max 1023 per call)
+            int batchSize = 1023;
+            for (int i = 0; i < matrices.Count; i += batchSize)
+            {
+                int count = Mathf.Min(batchSize, matrices.Count - i);
+                List<Matrix4x4> batch = matrices.GetRange(i, count);
+                
+                Graphics.DrawMeshInstanced(
+                    meshFilter.sharedMesh,
+                    0,
+                    instancedMaterial,
+                    batch,
+                    props
+                );
+            }
+        }
+    }
+    
+    // Public API for future event markers
+    public Vector3 GetWorldPositionForTime(DateTime time)
+    {
+        // Calculate where a specific time appears on the timeline
+        double timeSinceEnd = (time - timelineEnd).TotalSeconds;
+        DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
+        
+        double visibleProgress = (time - visibleStart).TotalSeconds / currentVisibleSeconds;
+        
+        if (visibleProgress < 0 || visibleProgress > 1)
+            return Vector3.zero; // Not visible
+        
+        return CalculateArcPosition((float)visibleProgress);
+    }
+    
+    public bool IsTimeVisible(DateTime time)
+    {
+        DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
+        DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
+        return time >= visibleStart && time <= visibleEnd;
+    }
+    
+    private void DebugLog(string message)
+    {
+        if (enableDebugLogs)
+        {
+            Debug.Log($"[Timeline] {message}");
+        }
+    }
+    
+    // Gizmos for editor visualization
+    void OnDrawGizmos()
+    {
+        if (!Application.isPlaying) return;
+        
+        Gizmos.color = Color.cyan;
+        
+        // Draw arc path
+        for (float t = 0; t <= 1f; t += 0.05f)
+        {
+            Vector3 pos = CalculateArcPosition(t);
+            Gizmos.DrawWireSphere(pos, 0.02f);
+        }
+    }
+}
