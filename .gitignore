@@ -102,3 +102,7 @@ InitTestScene*.unity*
 .vscode/
 .idea/
 .DS_Store
+
+# Gaussian Splats
+Assets/GaussianAssets/
+Assets/Splats/
