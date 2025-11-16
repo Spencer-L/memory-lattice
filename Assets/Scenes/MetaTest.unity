@@ -300,21 +300,21 @@ MonoBehaviour:
   eventConfigurations:
   - eventName: Kitchen
     markerType: Kitchen
-    timeOffsetHours: -0.05
+    timeOffsetHours: -17
     distance: 0.06
-    angle: 30
+    angle: 218
     randomizePosition: 0
   - eventName: MIT
     markerType: MIT
-    timeOffsetHours: -0.07
+    timeOffsetHours: -9.5
     distance: 0.17
-    angle: 45
+    angle: 342
     randomizePosition: 0
   - eventName: Stanford
     markerType: Stanford
-    timeOffsetHours: -0.12
+    timeOffsetHours: -5.8
     distance: 0.14
-    angle: 90
+    angle: 291
     randomizePosition: 0
   createExampleEvents: 1
 --- !u!1 &357221060
@@ -1705,7 +1705,7 @@ MonoBehaviour:
   totalBallCount: 3000
   minDistanceFromTimeline: 0.05
   maxDistanceFromTimeline: 0.2
-  baseBallScale: 0.002
+  baseBallScale: 0.004
   dynamicScaleFactor: 8
   baseDensityThreshold: 9000
   referenceZoomSeconds: 300000
