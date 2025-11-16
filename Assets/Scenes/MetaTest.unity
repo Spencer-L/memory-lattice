@@ -217,7 +217,7 @@ MonoBehaviour:
   timelineRangeMonths: 14
   arcRadius: 0.96
   arcDegrees: 120
-  arcOffset: {x: 0, y: 0.75, z: -0.48}
+  arcOffset: {x: 0, y: 0, z: -0.2}
   minVisibleSeconds: 60
   pinchManager: {fileID: 394292990}
   tickPrefab: {fileID: 9204507737298005678, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
@@ -255,13 +255,14 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 801afde2314f6a648a5cf11bb5c2f005, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::FollowPosition
-  m_Target: {fileID: 0}
+  m_Target: {fileID: 720765154}
   offset: {x: 0, y: 0, z: 0}
-  m_RotationTarget: {fileID: 0}
-  m_FollowInLocalSpace: 0
-  m_ApplyTargetInLocalSpace: 0
-  m_MovementSpeed: 4
+  m_RotationTarget: {fileID: 720765154}
+  m_FollowInLocalSpace: 1
+  m_ApplyTargetInLocalSpace: 1
+  m_MovementSpeed: 2
   m_SnapOnEnable: 1
+  m_MatchTargetRotation: 1
 --- !u!1 &357221060
 GameObject:
   m_ObjectHideFlags: 0
@@ -1841,7 +1842,7 @@ PrefabInstance:
     - target: {fileID: 7034970240488363244, guid: 4a4863d9e9cba4449a82351bd4c94077, type: 3}
       propertyPath: m_Asset
       value: 
-      objectReference: {fileID: 11400000, guid: d7f25b8824e2fce488fb9a17c768f2ad, type: 2}
+      objectReference: {fileID: 11400000, guid: 7ee3006f5be7583418357b070e05fa4f, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
