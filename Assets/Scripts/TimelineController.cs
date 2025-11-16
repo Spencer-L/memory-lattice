@@ -25,6 +25,13 @@ public class TimelineController : MonoBehaviour
     [SerializeField, Tooltip("Minimum visible time range in seconds (max zoom in)")]
     private float minVisibleSeconds = 60f; // 1 minute
     
+    [SerializeField, Tooltip("Zoom sensitivity multiplier (higher = more sensitive zoom)")]
+    private float zoomSensitivity = 1.0f;
+    
+    [Header("Scroll Configuration")]
+    [SerializeField, Tooltip("Scroll sensitivity multiplier (higher = faster scrolling)")]
+    private float scrollSensitivity = 1.0f;
+    
     [SerializeField, Tooltip("Reference to the hand pinch manager")]
     private HandPinchInteractionManager pinchManager;
     
@@ -370,7 +377,12 @@ public class TimelineController : MonoBehaviour
         
         // Ratio-based zoom: if hands move apart 2x, show half the time (zoom in)
         // if hands move together to 0.5x, show 2x the time (zoom out)
-        float ratio = initialDistance / currentDistance;
+        float rawRatio = initialDistance / currentDistance;
+        
+        // Apply zoom sensitivity: lerp between 1.0 (no change) and the raw ratio
+        // Higher sensitivity = more responsive zoom
+        float ratio = Mathf.Lerp(1.0f, rawRatio, zoomSensitivity);
+        
         double newVisibleSeconds = zoomStartVisibleSeconds * ratio;
         double clamped = Clamp(newVisibleSeconds, minVisibleSeconds, totalTimelineSeconds);
         
@@ -400,6 +412,9 @@ public class TimelineController : MonoBehaviour
         double arcLength = GetArcLengthMeters();
         if (arcLength <= Mathf.Epsilon)
             return false;
+        
+        // Apply scroll sensitivity multiplier
+        scrollDeltaMeters *= scrollSensitivity;
         
         // Direct mapping: scrolling right moves timeline right (forward in time, toward scroll=0/newest)
         double secondsPerMeter = currentVisibleSeconds / arcLength;

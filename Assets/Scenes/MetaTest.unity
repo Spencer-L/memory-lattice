@@ -217,8 +217,10 @@ MonoBehaviour:
   timelineRangeMonths: 14
   arcRadius: 0.96
   arcDegrees: 120
-  arcOffset: {x: 0, y: 0, z: -0.2}
+  arcOffset: {x: 0, y: -0.2, z: -0.2}
   minVisibleSeconds: 60
+  zoomSensitivity: 5
+  scrollSensitivity: 3
   pinchManager: {fileID: 394292990}
   tickPrefab: {fileID: 9204507737298005678, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
   targetTickCount: 1000
@@ -261,6 +263,8 @@ MonoBehaviour:
   m_FollowInLocalSpace: 1
   m_ApplyTargetInLocalSpace: 1
   m_MovementSpeed: 2
+  m_RotateSpeed: 0.2
+  m_RotationDeadzoneDegrees: 15
   m_SnapOnEnable: 1
   m_MatchTargetRotation: 1
 --- !u!1 &357221060
@@ -1550,6 +1554,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1717494914}
+  - component: {fileID: 1717494915}
   m_Layer: 0
   m_Name: BallsManager
   m_TagString: Untagged
@@ -1572,6 +1577,36 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1717494915
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1717494913}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: db472d7c8925da5499bfaf34e4b5f2f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BallsManager
+  timelineController: {fileID: 345928717}
+  ballPrefab: {fileID: 1432920945576284506, guid: 6ec5b03ce2db1464f9ee3d219bd2e014, type: 3}
+  totalBallCount: 300
+  minDistanceFromTimeline: 0.1
+  maxDistanceFromTimeline: 0.3
+  baseBallScale: 0.002
+  dynamicScaleFactor: 8
+  densityThreshold: 600
+  randomSeed: 42
+  colorPalette:
+  - {r: 0.8901961, g: 0.11764706, b: 0.14117648, a: 1}
+  - {r: 0.9254902, g: 0, b: 0.54901963, a: 1}
+  - {r: 0.36862746, g: 0.17254902, b: 0.5137255, a: 1}
+  - {r: 0, g: 0.31764707, b: 0.7294118, a: 1}
+  - {r: 0, g: 0.6509804, b: 0.3137255, a: 1}
+  - {r: 1, g: 0.8352941, b: 0, a: 1}
+  - {r: 1, g: 0.41568628, b: 0, a: 1}
+  enableDebugLogs: 1
 --- !u!1 &1725108602
 GameObject:
   m_ObjectHideFlags: 0

@@ -46,12 +46,28 @@ public class FollowPosition : MonoBehaviour
     [SerializeField, Tooltip("Movement speed used when smoothing to new target. Lower values mean the follow lags further behind the target.")]
     private float m_MovementSpeed = 4f;
 
-    private float m_RotateSpeed = 2f;
-
     public float movementSpeed
     {
         get => m_MovementSpeed;
         set => m_MovementSpeed = value;
+    }
+
+    [SerializeField, Tooltip("Rotation speed used when smoothing to new target. Lower values mean slower, more gradual rotation.")]
+    private float m_RotateSpeed = 0.5f;
+
+    public float rotateSpeed
+    {
+        get => m_RotateSpeed;
+        set => m_RotateSpeed = value;
+    }
+
+    [SerializeField, Tooltip("Minimum rotation difference in degrees before rotation adjustment begins (deadzone). Higher values make it less eager to adjust.")]
+    private float m_RotationDeadzoneDegrees = 2f;
+
+    public float rotationDeadzoneDegrees
+    {
+        get => m_RotationDeadzoneDegrees;
+        set => m_RotationDeadzoneDegrees = value;
     }
 
     [SerializeField, Tooltip("Snap to target position when this component is enabled.")]
@@ -72,7 +88,6 @@ public class FollowPosition : MonoBehaviour
         set => m_MatchTargetRotation = value;
     }
 
-    private const float ROTATION_THRESHOLD = 0.05f; // 5% threshold for rotation
     private const float POSITION_THRESHOLD = 0.001f; // 0.1% threshold for position
 
     private void Start()
@@ -136,7 +151,7 @@ public class FollowPosition : MonoBehaviour
             ? Quaternion.Angle(transform.localRotation, targetRotation)
             : Quaternion.Angle(transform.rotation, targetRotation);
 
-        if (angleDifference > ROTATION_THRESHOLD * 180f)
+        if (angleDifference > m_RotationDeadzoneDegrees)
         {
             // Smoothly interpolate the rotation
             if (m_FollowInLocalSpace)
