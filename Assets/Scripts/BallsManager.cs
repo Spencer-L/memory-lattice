@@ -51,6 +51,10 @@ public class BallsManager : MonoBehaviour
         new Color(255f/255f, 106f/255f, 0f/255f)     // Orange
     };
     
+    [Header("Object Pooling")]
+    [SerializeField, Tooltip("Initial pool size for ball instances")]
+    private int initialPoolSize = 100;
+    
     [Header("Debug")]
     [SerializeField, Tooltip("Enable debug logging")]
     private bool enableDebugLogs = true;
@@ -66,7 +70,6 @@ public class BallsManager : MonoBehaviour
         public float sizeParameter; // 0-1
         public GameObject instance;
         public bool isActive;
-        public Vector3 cachedTangent; // Cached for performance
     }
     
     // Internal state
@@ -76,6 +79,15 @@ public class BallsManager : MonoBehaviour
     private DateTime currentVisibleEnd;
     private double currentZoomLevel;
     private System.Random randomGenerator;
+    
+    // Object pooling
+    private Queue<GameObject> ballPool;
+    private List<GameObject> activeBalls;
+    
+    // Material property block for efficient color changes without material instances
+    private MaterialPropertyBlock propertyBlock;
+    private static readonly int ColorPropertyID = Shader.PropertyToID("_Color");
+    private static readonly int BaseColorPropertyID = Shader.PropertyToID("_BaseColor"); // For URP shaders
     
     void Start()
     {
@@ -108,6 +120,12 @@ public class BallsManager : MonoBehaviour
         allBalls = new List<BallData>();
         visibleBalls = new List<BallData>();
         
+        // Initialize material property block for efficient color changes
+        propertyBlock = new MaterialPropertyBlock();
+        
+        // Initialize object pool
+        InitializeBallPool();
+        
         // Generate ball parameters
         GenerateBallParameters();
         
@@ -125,13 +143,52 @@ public class BallsManager : MonoBehaviour
             timelineController.TimelineUpdated -= OnTimelineUpdated;
         }
         
-        // Clean up ball instances
-        foreach (var ball in allBalls)
+        // Clean up active ball instances
+        if (activeBalls != null)
         {
-            if (ball.instance != null)
+            foreach (var ball in activeBalls)
             {
-                Destroy(ball.instance);
+                if (ball != null)
+                {
+                    Destroy(ball);
+                }
             }
+            activeBalls.Clear();
+        }
+        
+        // Clean up pooled instances
+        if (ballPool != null)
+        {
+            while (ballPool.Count > 0)
+            {
+                GameObject pooledBall = ballPool.Dequeue();
+                if (pooledBall != null)
+                {
+                    Destroy(pooledBall);
+                }
+            }
+        }
+    }
+    
+    private void InitializeBallPool()
+    {
+        ballPool = new Queue<GameObject>();
+        activeBalls = new List<GameObject>();
+        
+        if (ballPrefab != null)
+        {
+            for (int i = 0; i < initialPoolSize; i++)
+            {
+                GameObject ball = Instantiate(ballPrefab, transform);
+                ball.SetActive(false);
+                ballPool.Enqueue(ball);
+            }
+            
+            DebugLog($"Ball pool initialized with {initialPoolSize} instances");
+        }
+        else
+        {
+            Debug.LogWarning("[BallsManager] Ball prefab not assigned - pool will be created on demand");
         }
     }
     
@@ -189,55 +246,117 @@ public class BallsManager : MonoBehaviour
         ApplyDensityCulling();
     }
     
+    private GameObject GetBallFromPool()
+    {
+        GameObject ball;
+        
+        if (ballPool.Count > 0)
+        {
+            ball = ballPool.Dequeue();
+        }
+        else
+        {
+            // Pool exhausted, create new instance
+            if (enableDebugLogs)
+            {
+                Debug.LogWarning($"[BallsManager] Ball pool exhausted! Creating new instance. Consider increasing pool size.");
+            }
+            ball = Instantiate(ballPrefab, transform);
+        }
+        
+        ball.SetActive(true);
+        activeBalls.Add(ball);
+        return ball;
+    }
+    
+    private void ReturnBallToPool(GameObject ball)
+    {
+        if (ball == null) return;
+        
+        ball.SetActive(false);
+        activeBalls.Remove(ball);
+        ballPool.Enqueue(ball);
+    }
+    
+    private void ReturnAllBallsToPool()
+    {
+        // Return all active balls to pool
+        for (int i = activeBalls.Count - 1; i >= 0; i--)
+        {
+            GameObject ball = activeBalls[i];
+            if (ball != null)
+            {
+                ball.SetActive(false);
+                ballPool.Enqueue(ball);
+            }
+        }
+        activeBalls.Clear();
+        
+        // Clear instance references in ball data
+        foreach (var ballData in allBalls)
+        {
+            ballData.instance = null;
+            ballData.isActive = false;
+        }
+    }
+    
     private void UpdateVisibleBalls()
     {
+        // Return all current balls to pool
+        ReturnAllBallsToPool();
+        
         // Clear previous visible balls list
         visibleBalls.Clear();
         
-        // Find balls within visible time range
+        // Find balls within visible time range and assign instances from pool
         foreach (var ball in allBalls)
         {
             if (timelineController.IsTimeVisible(ball.timestamp))
             {
                 visibleBalls.Add(ball);
                 
-                // Create instance if needed
-                if (ball.instance == null)
-                {
-                    ball.instance = Instantiate(ballPrefab, transform);
-                    ball.instance.name = $"Ball_{allBalls.IndexOf(ball)}";
-                    
-                    // Set color
-                    Renderer renderer = ball.instance.GetComponent<Renderer>();
-                    if (renderer != null)
-                    {
-                        // Create material instance to avoid modifying shared material
-                        renderer.material = new Material(renderer.sharedMaterial);
-                        renderer.material.color = ball.color;
-                    }
-                }
+                // Get instance from pool
+                ball.instance = GetBallFromPool();
+                
+                // Configure ball instance
+                ConfigureBallInstance(ball);
                 
                 // Position and scale the ball
                 PositionBall(ball);
                 
-                // Activate the ball (will be potentially deactivated by density culling)
-                ball.instance.SetActive(true);
                 ball.isActive = true;
-            }
-            else
-            {
-                // Hide balls outside visible range
-                if (ball.instance != null)
-                {
-                    ball.instance.SetActive(false);
-                    ball.isActive = false;
-                }
             }
         }
         
         if (enableDebugLogs && Time.frameCount % 120 == 0)
         {
-            DebugLog($"Visible balls: {visibleBalls.Count} / {allBalls.Count}");
+            DebugLog($"Visible balls: {visibleBalls.Count} / {allBalls.Count} | Pool: {ballPool.Count} | Active: {activeBalls.Count}");
+        }
+    }
+    
+    private void ConfigureBallInstance(BallData ball)
+    {
+        if (ball.instance == null) return;
+        
+        // Set color using MaterialPropertyBlock to avoid creating material instances
+        Renderer renderer = ball.instance.GetComponent<Renderer>();
+        if (renderer != null)
+        {
+            // Use MaterialPropertyBlock for efficient per-object color changes
+            // This doesn't create material instances and is perfect for pooled objects
+            
+            // Create a new MaterialPropertyBlock for this ball to avoid sharing
+            MaterialPropertyBlock ballPropertyBlock = new MaterialPropertyBlock();
+            
+            // Set color for both Standard and URP shaders
+            ballPropertyBlock.SetColor(ColorPropertyID, ball.color);      // Standard shader (_Color)
+            ballPropertyBlock.SetColor(BaseColorPropertyID, ball.color);  // URP shader (_BaseColor)
+            renderer.SetPropertyBlock(ballPropertyBlock);
+            
+            if (enableDebugLogs && Time.frameCount % 300 == 0 && visibleBalls.IndexOf(ball) < 3)
+            {
+                DebugLog($"Ball color set: {ball.color} for ball at {ball.timestamp:HH:mm:ss}");
+            }
         }
     }
     
