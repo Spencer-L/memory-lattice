@@ -1,4 +1,5 @@
 using UnityEngine;
+using UnityEngine.Events;
 using System;
 
 /// <summary>
@@ -7,6 +8,8 @@ using System;
 /// </summary>
 public class TimelineEventMarker : MonoBehaviour
 {
+    [System.Serializable]
+    public class MarkerSelectedEvent : UnityEvent<TimelineEventMarker> { }
     [Header("Position Offset Settings")]
     [SerializeField, Tooltip("Minimum offset from timeline position")]
     private Vector3 minOffset = new Vector3(-0.1f, -0.1f, -0.1f);
@@ -21,9 +24,23 @@ public class TimelineEventMarker : MonoBehaviour
     [SerializeField, Tooltip("Color of the connection line")]
     private Color lineColor = Color.white;
     
+    [Header("Selection Settings")]
+    [SerializeField, Tooltip("Event fired when marker is selected after lingering")]
+    public MarkerSelectedEvent onMarkerSelected = new MarkerSelectedEvent();
+    
+    [SerializeField, Tooltip("Duration in seconds to hold proximity before selection")]
+    private float selectionDuration = 1.0f;
+    
     public DateTime EventTime { get; set; }
     public string EventLabel { get; set; }
     public string MarkerType { get; private set; }
+    
+    // Selection state properties
+    public bool IsInProximity { get; private set; }
+    public float SelectionProgress => Mathf.Clamp01(selectionTimer / selectionDuration);
+    public bool IsSelected { get; private set; }
+    
+    private float selectionTimer = 0f;
     
     private TimelineController timeline;
     private Vector3 randomOffset; // Stored offset that stays consistent for this marker
@@ -83,6 +100,35 @@ public class TimelineEventMarker : MonoBehaviour
         // Disable shadows for the line
         connectionLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
         connectionLine.receiveShadows = false;
+    }
+    
+    /// <summary>
+    /// Update the proximity state of this marker. Call this each frame to track selection progress.
+    /// </summary>
+    /// <param name="isNear">True if the timeline center is within proximity threshold</param>
+    public void UpdateProximity(bool isNear)
+    {
+        IsInProximity = isNear;
+        
+        if (isNear)
+        {
+            // Increment selection timer
+            selectionTimer += Time.deltaTime;
+            
+            // Check if selection is complete
+            if (selectionTimer >= selectionDuration && !IsSelected)
+            {
+                IsSelected = true;
+                onMarkerSelected.Invoke(this);
+                Debug.Log($"[TimelineEventMarker] Marker selected: {EventLabel} at {EventTime:yyyy-MM-dd HH:mm:ss}");
+            }
+        }
+        else
+        {
+            // Reset timer and selection state when out of proximity
+            selectionTimer = 0f;
+            IsSelected = false;
+        }
     }
     
     void OnDestroy()

@@ -223,6 +223,10 @@ MonoBehaviour:
   zoomSensitivity: 5
   scrollSensitivity: 3
   pinchManager: {fileID: 394292990}
+  eventManager: {fileID: 345928720}
+  proximityThresholdSeconds: 30
+  selectionFillRadius: 0.05
+  selectionFillColor: {r: 0, g: 1, b: 1, a: 0.8}
   tickPrefab: {fileID: 9204507737298005678, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
   targetTickCount: 1000
   instancedMaterial: {fileID: 2100000, guid: e2f3dfe883e085a4f95a857cc8c91f6a, type: 2}

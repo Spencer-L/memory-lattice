@@ -35,6 +35,19 @@ public class TimelineController : MonoBehaviour
     [SerializeField, Tooltip("Reference to the hand pinch manager")]
     private HandPinchInteractionManager pinchManager;
     
+    [SerializeField, Tooltip("Reference to the timeline event manager")]
+    private TimelineEventManager eventManager;
+    
+    [Header("Selection Configuration")]
+    [SerializeField, Tooltip("Time proximity threshold in seconds for marker selection")]
+    private float proximityThresholdSeconds = 30f;
+    
+    [SerializeField, Tooltip("Radius of the selection fill indicator")]
+    private float selectionFillRadius = 0.05f;
+    
+    [SerializeField, Tooltip("Color of the selection fill indicator")]
+    private Color selectionFillColor = new Color(0f, 1f, 1f, 0.8f);
+    
     [Header("Tick Configuration")]
     [SerializeField, Tooltip("Prefab for timeline ticks (should use GPU instancing material)")]
     private GameObject tickPrefab;
@@ -81,6 +94,9 @@ public class TimelineController : MonoBehaviour
     private GameObject upperReticle;
     private GameObject lowerReticle;
     
+    // Selection indicator (single, centered)
+    private SelectionRadialFill selectionIndicator;
+    
     // Timeline state
     private DateTime timelineStart; // NOW
     private DateTime timelineEnd;   // 14 months ago
@@ -101,6 +117,10 @@ public class TimelineController : MonoBehaviour
     // Label pooling
     private Queue<GameObject> labelPool;
     private List<GameObject> activeLabels;
+    
+    // Selection tracking
+    private TimelineEventMarker markerInProximity = null;
+    public TimelineEventMarker MarkerInProximity => markerInProximity;
     
     // For future event markers
     public delegate void OnTimelineUpdated(DateTime visibleStart, DateTime visibleEnd, double zoomLevel);
@@ -236,7 +256,22 @@ public class TimelineController : MonoBehaviour
         lowerReticle = Instantiate(tickPrefab, transform);
         lowerReticle.name = "LowerReticle";
         
+        // Create selection indicators
+        InitializeSelectionIndicators();
+        
         DebugLog("Reticles initialized");
+    }
+    
+    void InitializeSelectionIndicators()
+    {
+        // Create centered selection indicator
+        GameObject indicatorObj = new GameObject("SelectionIndicator");
+        indicatorObj.transform.SetParent(transform);
+        selectionIndicator = indicatorObj.AddComponent<SelectionRadialFill>();
+        selectionIndicator.SetRadius(selectionFillRadius);
+        selectionIndicator.SetColor(selectionFillColor);
+        
+        DebugLog("Selection indicator initialized");
     }
     
     void Update()
@@ -244,6 +279,8 @@ public class TimelineController : MonoBehaviour
         if (pinchManager == null) return;
         
         UpdateTimelineFromInput();
+        UpdateMarkerProximity();
+        UpdateSelectionIndicators();
         UpdateTickPositions();
         UpdateReticlePositions();
         RenderTicks();
@@ -272,6 +309,42 @@ public class TimelineController : MonoBehaviour
         }
         
         TimelineUpdated?.Invoke(visibleStart, visibleEnd, currentVisibleSeconds);
+    }
+    
+    void UpdateMarkerProximity()
+    {
+        if (eventManager == null)
+            return;
+        
+        // Get the center timestamp
+        DateTime centerTime = GetCenterTimestamp();
+        
+        // Get all active markers
+        List<TimelineEventMarker> activeMarkers = eventManager.GetActiveMarkers();
+        
+        // Reset previous marker in proximity
+        markerInProximity = null;
+        
+        // Check each marker for proximity
+        foreach (TimelineEventMarker marker in activeMarkers)
+        {
+            if (marker == null) continue;
+            
+            // Calculate time difference in seconds
+            float timeDifferenceSeconds = Mathf.Abs((float)(marker.EventTime - centerTime).TotalSeconds);
+            
+            // Check if within proximity threshold
+            bool isNear = timeDifferenceSeconds <= proximityThresholdSeconds;
+            
+            // Update marker's proximity state
+            marker.UpdateProximity(isNear);
+            
+            // Track the marker currently in proximity (for visual feedback)
+            if (isNear && markerInProximity == null)
+            {
+                markerInProximity = marker;
+            }
+        }
     }
     
     void UpdateTickPositions()
@@ -359,6 +432,29 @@ public class TimelineController : MonoBehaviour
         
         visibleLevels.Sort();
         return visibleLevels;
+    }
+    
+    void UpdateSelectionIndicators()
+    {
+        if (selectionIndicator == null)
+            return;
+        
+        // Get selection progress from marker in proximity
+        float progress = 0f;
+        if (markerInProximity != null)
+        {
+            progress = markerInProximity.SelectionProgress;
+        }
+        
+        // Update fill amount
+        selectionIndicator.SetFillAmount(progress);
+        
+        // Position indicator at the center of the timeline (between upper and lower reticles)
+        Vector3 centerPosition = CalculateArcPosition(0.5f);
+        Quaternion centerRotation = CalculateArcRotation(0.5f);
+        
+        selectionIndicator.transform.position = centerPosition;
+        selectionIndicator.transform.rotation = centerRotation;
     }
     
     void UpdateReticlePositions()
@@ -893,6 +989,12 @@ public class TimelineController : MonoBehaviour
         if (lowerReticle != null)
         {
             Destroy(lowerReticle);
+        }
+        
+        // Clean up selection indicator
+        if (selectionIndicator != null)
+        {
+            Destroy(selectionIndicator.gameObject);
         }
     }
     
