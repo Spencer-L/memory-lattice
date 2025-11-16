@@ -15,6 +15,31 @@ public class TimelineEventManager : MonoBehaviour
         public GameObject prefab;
     }
     
+    [System.Serializable]
+    public class EventConfiguration
+    {
+        [Tooltip("Display name for this event")]
+        public string eventName = "New Event";
+        
+        [Tooltip("Marker type to use (must match a type name above)")]
+        public string markerType = "Kitchen";
+        
+        [Tooltip("Time offset from timeline center (in hours, negative = past)")]
+        public float timeOffsetHours = -1f;
+        
+        [Header("Position")]
+        [Tooltip("Radial distance from timeline arc (0-2m)")]
+        [Range(0f, 2f)]
+        public float distance = 0.5f;
+        
+        [Tooltip("Angle around the tangent (0-360 degrees)")]
+        [Range(0f, 360f)]
+        public float angle = 0f;
+        
+        [Tooltip("Use random position instead")]
+        public bool randomizePosition = false;
+    }
+    
     [Header("References")]
     [SerializeField, Tooltip("Reference to the TimelineController")]
     private TimelineController timelineController;
@@ -23,8 +48,12 @@ public class TimelineEventManager : MonoBehaviour
     [SerializeField, Tooltip("Different types of event markers with their prefabs")]
     private EventMarkerType[] markerTypes = new EventMarkerType[3];
     
+    [Header("Event Configuration")]
+    [SerializeField, Tooltip("Configure events to create at runtime")]
+    private EventConfiguration[] eventConfigurations = new EventConfiguration[0];
+    
     [Header("Example Events")]
-    [SerializeField, Tooltip("Create example events on Start for testing")]
+    [SerializeField, Tooltip("Create example events on Start for testing (uses eventConfigurations if not empty)")]
     private bool createExampleEvents = true;
     
     private List<TimelineEventMarker> activeMarkers = new List<TimelineEventMarker>();
@@ -87,8 +116,10 @@ public class TimelineEventManager : MonoBehaviour
     /// <param name="eventTime">The DateTime when this event occurs</param>
     /// <param name="markerTypeName">The type name of the marker (matches typeName in markerTypes array)</param>
     /// <param name="label">Optional label for the event</param>
+    /// <param name="distance">Radial distance from timeline arc (0-2m). Use -1 for random.</param>
+    /// <param name="angle">Angle around the tangent (0-360 degrees). Use -1 for random.</param>
     /// <returns>The created TimelineEventMarker instance</returns>
-    public TimelineEventMarker AddEvent(DateTime eventTime, string markerTypeName, string label = "")
+    public TimelineEventMarker AddEvent(DateTime eventTime, string markerTypeName, string label = "", float distance = -1f, float angle = -1f)
     {
         if (!markerTypeLookup.ContainsKey(markerTypeName))
         {
@@ -115,9 +146,24 @@ public class TimelineEventManager : MonoBehaviour
         }
         
         marker.Initialize(timelineController, eventTime, label, markerTypeName);
+        
+        // Set position if specified (otherwise uses randomization from marker)
+        if (distance >= 0f && angle >= 0f)
+        {
+            marker.SetPosition(distance, angle);
+        }
+        else if (distance >= 0f)
+        {
+            marker.SetDistance(distance);
+        }
+        else if (angle >= 0f)
+        {
+            marker.SetAngle(angle);
+        }
+        
         activeMarkers.Add(marker);
         
-        Debug.Log($"[TimelineEventManager] Added {markerTypeName} event at {eventTime:yyyy-MM-dd HH:mm:ss} - {label}");
+        Debug.Log($"[TimelineEventManager] Added {markerTypeName} event at {eventTime:yyyy-MM-dd HH:mm:ss} - {label} (distance: {(distance >= 0 ? distance.ToString("F2") : "random")}, angle: {(angle >= 0 ? angle.ToString("F1") + "°" : "random")})");
         
         return marker;
     }
@@ -127,8 +173,10 @@ public class TimelineEventManager : MonoBehaviour
     /// </summary>
     /// <param name="eventTime">The DateTime when this event occurs</param>
     /// <param name="label">Optional label for the event</param>
+    /// <param name="distance">Radial distance from timeline arc (0-2m). Use -1 for random.</param>
+    /// <param name="angle">Angle around the tangent (0-360 degrees). Use -1 for random.</param>
     /// <returns>The created TimelineEventMarker instance</returns>
-    public TimelineEventMarker AddEvent(DateTime eventTime, string label = "")
+    public TimelineEventMarker AddEvent(DateTime eventTime, string label = "", float distance = -1f, float angle = -1f)
     {
         if (markerTypeLookup.Count == 0)
         {
@@ -144,7 +192,7 @@ public class TimelineEventManager : MonoBehaviour
             break;
         }
         
-        return AddEvent(eventTime, firstType, label);
+        return AddEvent(eventTime, firstType, label, distance, angle);
     }
     
     /// <summary>
@@ -200,13 +248,13 @@ public class TimelineEventManager : MonoBehaviour
     }
     
     /// <summary>
-    /// Creates some example events for testing - demonstrates using different marker types
+    /// Creates events from configuration or uses example events for testing
     /// </summary>
     void CreateExampleEvents()
     {
         if (markerTypeLookup.Count == 0)
         {
-            Debug.LogWarning("[TimelineEventManager] Cannot create example events - no marker types configured!");
+            Debug.LogWarning("[TimelineEventManager] Cannot create events - no marker types configured!");
             return;
         }
         
@@ -216,29 +264,60 @@ public class TimelineEventManager : MonoBehaviour
         // Validate the center time is reasonable
         if (centerTime == DateTime.MinValue || centerTime == DateTime.MaxValue || centerTime.Year < 1900 || centerTime.Year > 2100)
         {
-            Debug.LogWarning($"[TimelineEventManager] Cannot create example events - timeline not properly initialized (center time: {centerTime})");
+            Debug.LogWarning($"[TimelineEventManager] Cannot create events - timeline not properly initialized (center time: {centerTime})");
             return;
         }
         
-        // Get available marker types
-        List<string> typeNames = new List<string>(markerTypeLookup.Keys);
-        
         try
         {
-            if (typeNames.Count >= 1)
-                AddEvent(centerTime.AddHours(-6), typeNames[0], "Kitchen");
+            // Use configured events if available
+            if (eventConfigurations != null && eventConfigurations.Length > 0)
+            {
+                foreach (var config in eventConfigurations)
+                {
+                    if (string.IsNullOrEmpty(config.markerType))
+                    {
+                        Debug.LogWarning($"[TimelineEventManager] Skipping event '{config.eventName}' - no marker type specified");
+                        continue;
+                    }
+                    
+                    // Calculate event time from offset
+                    DateTime eventTime = centerTime.AddHours(config.timeOffsetHours);
+                    
+                    // Determine distance and angle
+                    float distance = config.randomizePosition ? -1f : config.distance;
+                    float angle = config.randomizePosition ? -1f : config.angle;
+                    
+                    AddEvent(eventTime, config.markerType, config.eventName, distance, angle);
+                }
+                
+                Debug.Log($"[TimelineEventManager] Created {activeMarkers.Count} configured events around {centerTime:yyyy-MM-dd HH:mm:ss}");
+            }
+            else
+            {
+                // Fallback to hardcoded example events
+                List<string> typeNames = new List<string>(markerTypeLookup.Keys);
+                
+                // Create markers with different positioning:
+                // - Kitchen: close, at 0 degrees (top)
+                // - MIT: medium distance, at 90 degrees (right side)  
+                // - Stanford: far, at 180 degrees (bottom)
+                
+                if (typeNames.Count >= 1)
+                    AddEvent(centerTime.AddHours(-6), typeNames[0], "Kitchen", distance: 0.3f, angle: 0f);
 
-            if (typeNames.Count >= 2)
-                AddEvent(centerTime.AddDays(-5), typeNames[1], "MIT");
-            
-            if (typeNames.Count >= 3)
-                AddEvent(centerTime.AddMinutes(-15), typeNames[2], "Stanford");
+                if (typeNames.Count >= 2)
+                    AddEvent(centerTime.AddDays(-5), typeNames[1], "MIT", distance: 0.5f, angle: 90f);
+                
+                if (typeNames.Count >= 3)
+                    AddEvent(centerTime.AddMinutes(-15), typeNames[2], "Stanford", distance: 0.7f, angle: 180f);
 
-            Debug.Log($"[TimelineEventManager] Created {activeMarkers.Count} example events around {centerTime:yyyy-MM-dd HH:mm:ss}");
+                Debug.Log($"[TimelineEventManager] Created {activeMarkers.Count} example events around {centerTime:yyyy-MM-dd HH:mm:ss}");
+            }
         }
         catch (ArgumentOutOfRangeException ex)
         {
-            Debug.LogError($"[TimelineEventManager] Failed to create example events - date calculation error: {ex.Message}. Center time was: {centerTime}");
+            Debug.LogError($"[TimelineEventManager] Failed to create events - date calculation error: {ex.Message}. Center time was: {centerTime}");
         }
     }
     
