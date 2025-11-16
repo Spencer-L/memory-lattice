@@ -435,6 +435,10 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 7034970240488363244, guid: 4a4863d9e9cba4449a82351bd4c94077, type: 3}
+      propertyPath: m_Asset
+      value: 
+      objectReference: {fileID: 11400000, guid: 1a615e13a0dbd432d8f6675d46ad8567, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -484,7 +488,7 @@ MonoBehaviour:
   _realtime: {fileID: 0}
   _sceneViewUUID: 
   _viewUUID: 1e2b2ba9-ee9b-499d-a35f-d1acb0860a99
-  _sceneViewPreventOwnershipTakeover: 0
+  _sceneViewPreventOwnershipTakeover: 1
   _sceneViewDestroyWhenLastClientLeaves: 1
   _components:
   - componentID: 1
