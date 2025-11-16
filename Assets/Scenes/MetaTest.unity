@@ -812,7 +812,7 @@ MonoBehaviour:
   - {fileID: 1807167544}
   - {fileID: 1908309050}
   - {fileID: 782284489}
-  transitionDelay: 0.5
+  transitionDelay: 5
 --- !u!1 &457826821
 GameObject:
   m_ObjectHideFlags: 0
@@ -1565,9 +1565,37 @@ PrefabInstance:
       propertyPath: _viewUUID
       value: a7a4dfda-8502-4c50-b298-24d8e3f596fc
       objectReference: {fileID: 0}
+    - target: {fileID: 3028646528676155484, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
+      propertyPath: m_ConstrainProportionsScale
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 4194736403331386553, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
       propertyPath: m_Name
       value: Stanford Splat Variant
+      objectReference: {fileID: 0}
+    - target: {fileID: 4194736403331386553, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 6619980382237835773, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
+      propertyPath: m_Cutouts.Array.size
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 6619980382237835773, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
+      propertyPath: 'm_Cutouts.Array.data[2]'
+      value: 
+      objectReference: {fileID: 1831003353}
+    - target: {fileID: 7129958886826140440, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 7129958886826140440, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 7129958886826140440, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
+      propertyPath: m_LocalScale.z
+      value: -5
       objectReference: {fileID: 0}
     - target: {fileID: 7129958886826140440, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
       propertyPath: m_LocalPosition.x
@@ -1608,6 +1636,10 @@ PrefabInstance:
     - target: {fileID: 7129958886826140440, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7129958886826140440, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
+      propertyPath: m_ConstrainProportionsScale
+      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -1728,6 +1760,17 @@ MonoBehaviour:
   installationRoutineCheckpoint:
     _installationRoutineId: 2063f481-1b63-4eda-9ee8-a00df98536bc
     _installationVariants: []
+--- !u!114 &1401616750 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 235859281600029461, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
+  m_PrefabInstance: {fileID: 1908309049}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2c57a1c501bd05549ae157cc474bd4c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GaussianSplatting::GaussianSplatting.Runtime.GaussianCutout
 --- !u!1 &1430258843
 GameObject:
   m_ObjectHideFlags: 0
@@ -2033,6 +2076,17 @@ MonoBehaviour:
   onClap:
     m_PersistentCalls:
       m_Calls: []
+--- !u!114 &1697126887 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 309936439562598841, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
+  m_PrefabInstance: {fileID: 1807167543}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2c57a1c501bd05549ae157cc474bd4c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GaussianSplatting::GaussianSplatting.Runtime.GaussianCutout
 --- !u!1 &1698459292
 GameObject:
   m_ObjectHideFlags: 0
@@ -2389,7 +2443,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2231479454098494420, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
       propertyPath: m_IsActive
-      value: 1
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 3182331644947049895, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
       propertyPath: m_IsActive
@@ -2402,6 +2456,18 @@ PrefabInstance:
     - target: {fileID: 3988565281226428459, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
       propertyPath: _viewUUID
       value: 0087d9ce-2469-4c64-8119-ee949da47bf7
+      objectReference: {fileID: 0}
+    - target: {fileID: 5493083910618720342, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
+      propertyPath: m_LocalScale.x
+      value: 1.3
+      objectReference: {fileID: 0}
+    - target: {fileID: 5493083910618720342, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
+      propertyPath: m_LocalScale.y
+      value: 1.3
+      objectReference: {fileID: 0}
+    - target: {fileID: 5493083910618720342, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
+      propertyPath: m_LocalScale.z
+      value: 1.3
       objectReference: {fileID: 0}
     - target: {fileID: 5493083910618720342, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
       propertyPath: m_LocalPosition.x
@@ -2443,10 +2509,26 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 5493083910618720342, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
+      propertyPath: m_ConstrainProportionsScale
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 6962996914847717165, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
+      propertyPath: m_IsActive
+      value: 1
+      objectReference: {fileID: 0}
     - target: {fileID: 8437226132325632691, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
       propertyPath: m_Asset
       value: 
       objectReference: {fileID: 11400000, guid: d7f25b8824e2fce488fb9a17c768f2ad, type: 2}
+    - target: {fileID: 8437226132325632691, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
+      propertyPath: m_Cutouts.Array.size
+      value: 4
+      objectReference: {fileID: 0}
+    - target: {fileID: 8437226132325632691, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
+      propertyPath: 'm_Cutouts.Array.data[3]'
+      value: 
+      objectReference: {fileID: 1697126887}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -2457,6 +2539,17 @@ GameObject:
   m_CorrespondingSourceObject: {fileID: 1513029064347699191, guid: 14fc89ef0437ca24eafcc4727433d3ae, type: 3}
   m_PrefabInstance: {fileID: 1807167543}
   m_PrefabAsset: {fileID: 0}
+--- !u!114 &1831003353 stripped
+MonoBehaviour:
+  m_CorrespondingSourceObject: {fileID: 3063842953361175287, guid: 55b9f7a6c41946e42a9ad8fadee9ab35, type: 3}
+  m_PrefabInstance: {fileID: 782284488}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 2c57a1c501bd05549ae157cc474bd4c4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: GaussianSplatting::GaussianSplatting.Runtime.GaussianCutout
 --- !u!1 &1861913913
 GameObject:
   m_ObjectHideFlags: 0
@@ -2597,6 +2690,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: MIT Splat Variant
       objectReference: {fileID: 0}
+    - target: {fileID: 1438819412951244123, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
+      propertyPath: m_IsActive
+      value: 0
+      objectReference: {fileID: 0}
     - target: {fileID: 3482082635396237959, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
       propertyPath: _viewUUID
       value: 0c572363-945c-4aa4-995a-adcba9d6f77d
@@ -2619,7 +2716,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5418877079858705146, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
       propertyPath: m_LocalRotation.x
-      value: 1
+      value: 0.7071068
       objectReference: {fileID: 0}
     - target: {fileID: 5418877079858705146, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
       propertyPath: m_LocalRotation.y
@@ -2627,7 +2724,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5418877079858705146, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
       propertyPath: m_LocalRotation.z
-      value: 0
+      value: -0.7071068
       objectReference: {fileID: 0}
     - target: {fileID: 5418877079858705146, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -2635,12 +2732,20 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 5418877079858705146, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
+      value: 90
       objectReference: {fileID: 0}
     - target: {fileID: 5418877079858705146, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 8223539109147562015, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
+      propertyPath: m_Cutouts.Array.size
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 8223539109147562015, guid: d16429303e1cb6041aa6b18d80022692, type: 3}
+      propertyPath: 'm_Cutouts.Array.data[2]'
+      value: 
+      objectReference: {fileID: 1401616750}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
