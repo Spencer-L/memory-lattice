@@ -22,6 +22,9 @@ public class TimelineController : MonoBehaviour
     private Vector3 arcOffset = new Vector3(0f, -0.3f, 0.5f);
     
     [Header("Zoom Configuration")]
+    [SerializeField, Tooltip("Initial visible time range in seconds at startup")]
+    private float initialVisibleSeconds = 7200f; // 2 hours
+    
     [SerializeField, Tooltip("Minimum visible time range in seconds (max zoom in)")]
     private float minVisibleSeconds = 60f; // 1 minute
     
@@ -182,15 +185,15 @@ public class TimelineController : MonoBehaviour
         timelineEnd = timelineStart.AddMonths(-(int)timelineRangeMonths);
         totalTimelineSeconds = (timelineStart - timelineEnd).TotalSeconds;
         
-        // Initialize view to show 5 minutes, centered on newest time
+        // Initialize view to show configured time range, centered on newest time
         // In the new model: scroll directly controls what time appears at arc center
         // scroll=0 means timelineStart (newest) is at the center
-        currentVisibleSeconds = 300; // 5 minutes = 300 seconds
+        currentVisibleSeconds = initialVisibleSeconds;
         currentScrollTime = 0; // 0 = newest time centered
         
         DebugLog($"Timeline range: {timelineEnd:yyyy-MM-dd HH:mm} to {timelineStart:yyyy-MM-dd HH:mm}");
         DebugLog($"Total duration: {totalTimelineSeconds / 86400:F1} days");
-        DebugLog($"Initial view: 5 minutes centered on newest time");
+        DebugLog($"Initial view: {initialVisibleSeconds / 3600:F1} hours centered on newest time");
     }
     
     void InitializeTickLevels()

@@ -219,6 +219,7 @@ MonoBehaviour:
   arcRadius: 0.96
   arcDegrees: 120
   arcOffset: {x: 0, y: -0.2, z: -0.2}
+  initialVisibleSeconds: 52000
   minVisibleSeconds: 60
   zoomSensitivity: 5
   scrollSensitivity: 3
@@ -235,9 +236,9 @@ MonoBehaviour:
   labelPoolSize: 100
   minLabelAngleDegrees: 0.2
   showReticles: 1
-  upperReticleOffset: 0.03
-  lowerReticleOffset: -0.03
-  reticleHeightMultiplier: 3
+  upperReticleOffset: 0.06
+  lowerReticleOffset: -0.06
+  reticleHeightMultiplier: 5.5
   enableDebugLogs: 1
 --- !u!4 &345928718
 Transform:
@@ -296,6 +297,25 @@ MonoBehaviour:
     prefab: {fileID: 2606808744732026842, guid: bebf9bc349fcdb04cb76ed530671a084, type: 3}
   - typeName: Stanford
     prefab: {fileID: 2445123447601407533, guid: 7c1e60467d7cf1c43ae6092b3aca6833, type: 3}
+  eventConfigurations:
+  - eventName: Kitchen
+    markerType: Kitchen
+    timeOffsetHours: -0.05
+    distance: 0.06
+    angle: 30
+    randomizePosition: 0
+  - eventName: MIT
+    markerType: MIT
+    timeOffsetHours: -0.07
+    distance: 0.17
+    angle: 45
+    randomizePosition: 0
+  - eventName: Stanford
+    markerType: Stanford
+    timeOffsetHours: -0.12
+    distance: 0.14
+    angle: 90
+    randomizePosition: 0
   createExampleEvents: 1
 --- !u!1 &357221060
 GameObject:
@@ -1683,8 +1703,8 @@ MonoBehaviour:
   timelineController: {fileID: 345928717}
   ballPrefab: {fileID: 1432920945576284506, guid: 6ec5b03ce2db1464f9ee3d219bd2e014, type: 3}
   totalBallCount: 3000
-  minDistanceFromTimeline: 0.1
-  maxDistanceFromTimeline: 0.3
+  minDistanceFromTimeline: 0.05
+  maxDistanceFromTimeline: 0.2
   baseBallScale: 0.002
   dynamicScaleFactor: 8
   baseDensityThreshold: 9000
@@ -2257,63 +2277,6 @@ Transform:
   m_Children: []
   m_Father: {fileID: 1156038387}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!1001 &2708285941035763947
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: 8572754535297125552, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8572754535297125552, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_LocalPosition.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8572754535297125552, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_LocalPosition.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8572754535297125552, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: 8572754535297125552, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_LocalRotation.x
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8572754535297125552, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_LocalRotation.y
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8572754535297125552, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_LocalRotation.z
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8572754535297125552, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8572754535297125552, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 8572754535297125552, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 9204507737298005678, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
-      propertyPath: m_Name
-      value: Tick
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
@@ -2325,7 +2288,6 @@ SceneRoots:
   - {fileID: 764120696}
   - {fileID: 394292991}
   - {fileID: 345928718}
-  - {fileID: 2708285941035763947}
   - {fileID: 1807167543}
   - {fileID: 1908309049}
   - {fileID: 782284488}

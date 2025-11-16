@@ -10,12 +10,18 @@ public class TimelineEventMarker : MonoBehaviour
 {
     [System.Serializable]
     public class MarkerSelectedEvent : UnityEvent<TimelineEventMarker> { }
-    [Header("Position Offset Settings")]
-    [SerializeField, Tooltip("Minimum offset from timeline position")]
-    private Vector3 minOffset = new Vector3(-0.1f, -0.1f, -0.1f);
     
-    [SerializeField, Tooltip("Maximum offset from timeline position")]
-    private Vector3 maxOffset = new Vector3(0.1f, 0.1f, 0.1f);
+    [Header("Position Offset Settings (Set via TimelineEventManager)")]
+    [SerializeField, Tooltip("Radial distance from timeline arc")]
+    private float distanceFromTimeline = 0.3f;
+    
+    [SerializeField, Tooltip("Angle around the tangent (0-360 degrees)")]
+    private float angleInDegrees = 0f;
+    
+    // Randomization defaults (used if position not specified by manager)
+    private bool randomizePosition = true;
+    private float minDistance = 0.2f;
+    private float maxDistance = 0.8f;
     
     [Header("Connection Line Settings")]
     [SerializeField, Tooltip("Width of the line connecting marker to timeline")]
@@ -43,8 +49,8 @@ public class TimelineEventMarker : MonoBehaviour
     private float selectionTimer = 0f;
     
     private TimelineController timeline;
-    private Vector3 randomOffset; // Stored offset that stays consistent for this marker
     private LineRenderer connectionLine; // Line connecting marker to timeline position
+    private double currentZoomLevel = 300.0; // Cache current visible seconds for tangent calculation
     
     /// <summary>
     /// Initialize the event marker with a specific time and label
@@ -56,12 +62,12 @@ public class TimelineEventMarker : MonoBehaviour
         EventLabel = label;
         MarkerType = markerType;
         
-        // Generate a random offset for this marker that will be consistent
-        randomOffset = new Vector3(
-            UnityEngine.Random.Range(minOffset.x, maxOffset.x),
-            UnityEngine.Random.Range(minOffset.y, maxOffset.y),
-            UnityEngine.Random.Range(minOffset.z, maxOffset.z)
-        );
+        // Randomize position if enabled
+        if (randomizePosition)
+        {
+            distanceFromTimeline = Mathf.Lerp(minDistance, maxDistance, UnityEngine.Random.value);
+            angleInDegrees = UnityEngine.Random.Range(0f, 360f);
+        }
         
         // Create and configure the connection line
         SetupConnectionLine();
@@ -141,6 +147,7 @@ public class TimelineEventMarker : MonoBehaviour
     
     void OnTimelineUpdated(DateTime visibleStart, DateTime visibleEnd, double zoomLevel)
     {
+        currentZoomLevel = zoomLevel;
         UpdatePosition();
     }
     
@@ -159,8 +166,14 @@ public class TimelineEventMarker : MonoBehaviour
             
             if (timelinePosition != Vector3.zero)
             {
-                // Apply the random offset to position the marker near but not on the timeline
-                Vector3 markerPosition = timelinePosition + randomOffset;
+                // Calculate tangent at this point (like BallsManager does)
+                Vector3 tangent = CalculateTangentAtTime(EventTime);
+                
+                // Calculate cylindrical offset using distance and angle
+                // This ensures the offset is perpendicular to the arc, creating proper radial positioning
+                Vector3 offset = CalculateCylindricalOffset(tangent, distanceFromTimeline, angleInDegrees);
+                
+                Vector3 markerPosition = timelinePosition + offset;
                 transform.position = markerPosition;
                 
                 // Update the connection line between marker and timeline position
@@ -174,11 +187,107 @@ public class TimelineEventMarker : MonoBehaviour
     }
     
     /// <summary>
+    /// Calculate the tangent direction at a specific time on the timeline arc.
+    /// Uses numerical derivative by sampling nearby points.
+    /// Delta is proportional to zoom level to work at all zoom ranges.
+    /// </summary>
+    private Vector3 CalculateTangentAtTime(DateTime time)
+    {
+        // Use a delta that's proportional to the current zoom level
+        // Sample at ~1% of visible range on each side
+        double deltaSeconds = currentZoomLevel * 0.01;
+        // Clamp to reasonable bounds (0.1 to 1000 seconds)
+        deltaSeconds = Math.Max(0.1, Math.Min(1000.0, deltaSeconds));
+        
+        DateTime timeBefore = time.AddSeconds(-deltaSeconds);
+        DateTime timeAfter = time.AddSeconds(deltaSeconds);
+        
+        Vector3 posBefore = timeline.GetWorldPositionForTime(timeBefore);
+        Vector3 posAfter = timeline.GetWorldPositionForTime(timeAfter);
+        
+        // Check if positions are valid (not zero)
+        if (posBefore == Vector3.zero || posAfter == Vector3.zero)
+        {
+            // Fallback: return a default tangent
+            return Vector3.right;
+        }
+        
+        Vector3 tangent = (posAfter - posBefore).normalized;
+        return tangent;
+    }
+    
+    /// <summary>
+    /// Calculate offset perpendicular to the tangent using cylindrical coordinates.
+    /// This matches how BallsManager positions balls relative to the arc.
+    /// </summary>
+    private Vector3 CalculateCylindricalOffset(Vector3 tangent, float distance, float angleInDegrees)
+    {
+        // Create a perpendicular vector to the tangent for the radial direction
+        // Use cross product with up vector to get a perpendicular direction
+        Vector3 radialBase = Vector3.Cross(tangent, Vector3.up).normalized;
+        
+        // If tangent is parallel to up, use forward instead
+        if (radialBase.magnitude < 0.01f)
+        {
+            radialBase = Vector3.Cross(tangent, Vector3.forward).normalized;
+        }
+        
+        // Rotate the radial base around the tangent by the specified angle
+        Quaternion rotation = Quaternion.AngleAxis(angleInDegrees, tangent);
+        Vector3 radialDirection = rotation * radialBase;
+        
+        // Apply distance
+        Vector3 offset = radialDirection * distance;
+        
+        return offset;
+    }
+    
+    /// <summary>
     /// Force an immediate position update (useful after changing EventTime)
     /// </summary>
     public void ForceUpdate()
     {
         UpdatePosition();
     }
+    
+    /// <summary>
+    /// Set the marker's distance from the timeline arc
+    /// </summary>
+    public void SetDistance(float distance)
+    {
+        distanceFromTimeline = Mathf.Clamp(distance, 0f, 2f);
+        UpdatePosition();
+    }
+    
+    /// <summary>
+    /// Set the marker's angle around the tangent
+    /// </summary>
+    public void SetAngle(float angle)
+    {
+        angleInDegrees = angle % 360f;
+        if (angleInDegrees < 0f) angleInDegrees += 360f;
+        UpdatePosition();
+    }
+    
+    /// <summary>
+    /// Set both distance and angle at once
+    /// </summary>
+    public void SetPosition(float distance, float angle)
+    {
+        distanceFromTimeline = Mathf.Clamp(distance, 0f, 2f);
+        angleInDegrees = angle % 360f;
+        if (angleInDegrees < 0f) angleInDegrees += 360f;
+        UpdatePosition();
+    }
+    
+    /// <summary>
+    /// Get current distance from timeline
+    /// </summary>
+    public float GetDistance() => distanceFromTimeline;
+    
+    /// <summary>
+    /// Get current angle in degrees
+    /// </summary>
+    public float GetAngle() => angleInDegrees;
 }
 

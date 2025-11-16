@@ -497,7 +497,11 @@ public class BallsManager : MonoBehaviour
     private Vector3 CalculateTangentAtTime(DateTime time)
     {
         // Calculate tangent by sampling two nearby points on the arc
-        double deltaSeconds = 0.1; // Small time delta for numerical derivative
+        // Use a delta that's proportional to the current zoom level
+        // Sample at ~1% of visible range on each side
+        double deltaSeconds = currentZoomLevel * 0.01;
+        // Clamp to reasonable bounds (0.1 to 1000 seconds)
+        deltaSeconds = Math.Max(0.1, Math.Min(1000.0, deltaSeconds));
         
         DateTime timeBefore = time.AddSeconds(-deltaSeconds);
         DateTime timeAfter = time.AddSeconds(deltaSeconds);
