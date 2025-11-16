@@ -144,13 +144,15 @@ public class TimelineController : MonoBehaviour
         timelineEnd = timelineStart.AddMonths(-(int)timelineRangeMonths);
         totalTimelineSeconds = (timelineStart - timelineEnd).TotalSeconds;
         
-        // Initialize view to show 5 minutes, starting at newest time (scroll=0 is now newest)
+        // Initialize view to show 5 minutes, centered on newest time
+        // In the new model: scroll directly controls what time appears at arc center
+        // scroll=0 means timelineStart (newest) is at the center
         currentVisibleSeconds = 300; // 5 minutes = 300 seconds
-        currentScrollTime = 0; // 0 = showing the newest/rightmost end
+        currentScrollTime = 0; // 0 = newest time centered
         
         DebugLog($"Timeline range: {timelineEnd:yyyy-MM-dd HH:mm} to {timelineStart:yyyy-MM-dd HH:mm}");
         DebugLog($"Total duration: {totalTimelineSeconds / 86400:F1} days");
-        DebugLog($"Initial view: 5 minutes at newest end");
+        DebugLog($"Initial view: 5 minutes centered on newest time");
     }
     
     void InitializeTickLevels()
@@ -220,14 +222,15 @@ public class TimelineController : MonoBehaviour
             zoomStartVisibleSeconds = 0;
         }
         
-        // Inverted: scroll=0 is newest (timelineStart), higher values go back in time
-        DateTime visibleEnd = timelineStart.AddSeconds(-currentScrollTime);
-        DateTime visibleStart = visibleEnd.AddSeconds(-currentVisibleSeconds);
+        // Center-based model: currentScrollTime is seconds back from timelineStart to the center point
+        DateTime centerTime = timelineStart.AddSeconds(-currentScrollTime);
+        DateTime visibleStart = centerTime.AddSeconds(-currentVisibleSeconds / 2.0);
+        DateTime visibleEnd = centerTime.AddSeconds(currentVisibleSeconds / 2.0);
         
         if (enableDebugLogs && (zoomChanged || scrollChanged) && Time.frameCount % 30 == 0)
         {
             double secondsPerMeter = GetSecondsPerMeter();
-            DebugLog($"View: {visibleStart:MM/dd HH:mm} to {visibleEnd:MM/dd HH:mm} | Range: {currentVisibleSeconds / 3600:F1}hrs | Seconds/m: {secondsPerMeter:F3}");
+            DebugLog($"Center: {centerTime:MM/dd HH:mm:ss} | View: {visibleStart:MM/dd HH:mm} to {visibleEnd:MM/dd HH:mm} | Range: {currentVisibleSeconds / 3600:F1}hrs");
         }
         
         TimelineUpdated?.Invoke(visibleStart, visibleEnd, currentVisibleSeconds);
@@ -384,19 +387,16 @@ public class TimelineController : MonoBehaviour
         float ratio = Mathf.Lerp(1.0f, rawRatio, zoomSensitivity);
         
         double newVisibleSeconds = zoomStartVisibleSeconds * ratio;
-        double clamped = Clamp(newVisibleSeconds, minVisibleSeconds, totalTimelineSeconds);
+        double clampedVisibleSeconds = Clamp(newVisibleSeconds, minVisibleSeconds, totalTimelineSeconds);
         
-        // Center-based zoom: adjust scroll to keep the center point fixed
-        double oldVisibleSeconds = currentVisibleSeconds;
-        double centerTime = currentScrollTime + (oldVisibleSeconds * 0.5);
-        
-        bool changed = Math.Abs(clamped - currentVisibleSeconds) > 1e-6;
+        bool changed = Math.Abs(clampedVisibleSeconds - currentVisibleSeconds) > 1e-6;
         if (changed)
         {
-            currentVisibleSeconds = clamped;
+            currentVisibleSeconds = clampedVisibleSeconds;
             
-            // Reposition scroll so the center stays in the same place
-            currentScrollTime = centerTime - (currentVisibleSeconds * 0.5);
+            // Center-based zoom: keep the center fixed, but clamp it to valid range
+            // currentScrollTime already represents the center point
+            // Just ensure it stays within bounds after the zoom change
             ClampScrollTime();
         }
         
@@ -416,15 +416,16 @@ public class TimelineController : MonoBehaviour
         // Apply scroll sensitivity multiplier
         scrollDeltaMeters *= scrollSensitivity;
         
-        // Direct mapping: scrolling right moves timeline right (forward in time, toward scroll=0/newest)
+        // Center-based scrolling: scrolling right moves timeline right (shows older content)
+        // This means the center point moves toward older times (increases scroll)
         double secondsPerMeter = currentVisibleSeconds / arcLength;
         double scrollSecondsDelta = scrollDeltaMeters * secondsPerMeter;
         
-        double scrollableRange = Math.Max(0, totalTimelineSeconds - currentVisibleSeconds);
-        double clamped = Clamp(currentScrollTime + scrollSecondsDelta, 0, scrollableRange);
+        double newScrollTime = currentScrollTime + scrollSecondsDelta;
+        ClampScrollTime(ref newScrollTime);
         
-        bool changed = Math.Abs(clamped - currentScrollTime) > 1e-6;
-        currentScrollTime = clamped;
+        bool changed = Math.Abs(newScrollTime - currentScrollTime) > 1e-6;
+        currentScrollTime = newScrollTime;
 
         if (changed)
         {
@@ -436,8 +437,30 @@ public class TimelineController : MonoBehaviour
     
     void ClampScrollTime()
     {
-        double scrollableRange = Math.Max(0, totalTimelineSeconds - currentVisibleSeconds);
-        currentScrollTime = Clamp(currentScrollTime, 0, scrollableRange);
+        ClampScrollTime(ref currentScrollTime);
+    }
+    
+    void ClampScrollTime(ref double scrollTime)
+    {
+        // In center-based model:
+        // - scrollTime = 0: newest time (timelineStart) at center
+        // - scrollTime = totalTimelineSeconds: oldest time (timelineEnd) at center
+        // 
+        // But we must ensure the visible range doesn't exceed timeline bounds:
+        // - Center can't be so new that visibleEnd > timelineStart
+        // - Center can't be so old that visibleStart < timelineEnd
+        
+        double halfVisible = currentVisibleSeconds * 0.5;
+        
+        // Minimum scroll: center can't be newer than timelineStart
+        // (which would put visibleEnd beyond timelineStart)
+        double minScroll = 0.0;
+        
+        // Maximum scroll: center can't be older than timelineEnd  
+        // (which would put visibleStart before timelineEnd)
+        double maxScroll = totalTimelineSeconds;
+        
+        scrollTime = Clamp(scrollTime, minScroll, maxScroll);
     }
     
     double GetSecondsPerMeter()
@@ -472,29 +495,41 @@ public class TimelineController : MonoBehaviour
     TickLevel tickLevel = tickLevels[level];
     double tickInterval = tickLevel.intervalSeconds;
     
-    // Calculate visible time range (inverted: scroll=0 is newest)
-    DateTime visibleEnd = timelineStart.AddSeconds(-currentScrollTime);
-    DateTime visibleStart = visibleEnd.AddSeconds(-currentVisibleSeconds);
+    // Calculate visible time range (center-based model)
+    DateTime centerTime = timelineStart.AddSeconds(-currentScrollTime);
+    DateTime visibleStart = centerTime.AddSeconds(-currentVisibleSeconds / 2.0);
+    DateTime visibleEnd = centerTime.AddSeconds(currentVisibleSeconds / 2.0);
     
-    // Find the first tick time (aligned to interval)
-    DateTime firstTick = AlignToInterval(visibleStart, tickInterval);
+    // Keep original visible range for arc position calculations
+    DateTime originalVisibleStart = visibleStart;
+    
+    // Clamp to timeline bounds for tick generation
+    DateTime clampedVisibleStart = visibleStart;
+    DateTime clampedVisibleEnd = visibleEnd;
+    
+    if (clampedVisibleStart < timelineEnd) clampedVisibleStart = timelineEnd;
+    if (clampedVisibleEnd > timelineStart) clampedVisibleEnd = timelineStart;
+    
+    // If the clamped range is invalid, skip this level
+    if (clampedVisibleStart >= clampedVisibleEnd)
+        return;
+    
+    // Find the first tick time (aligned to interval) within the clamped range
+    DateTime firstTick = AlignToInterval(clampedVisibleStart, tickInterval);
     
     // Generate ticks
     DateTime currentTick = firstTick;
     int tickCount = 0;
     int maxTicks = targetTickCount; // Safety limit
     
-    while (currentTick <= visibleEnd && tickCount < maxTicks)
+    while (currentTick <= clampedVisibleEnd && tickCount < maxTicks)
     {
-        // Calculate normalized position on timeline (0 = oldest, 1 = newest/now)
-        double timeSinceEnd = (currentTick - timelineEnd).TotalSeconds;
-        double normalizedTime = timeSinceEnd / totalTimelineSeconds;
-        
-        // Check if this tick is within the visible range
-        if (currentTick >= visibleStart && currentTick <= visibleEnd)
+        // Only generate ticks within timeline bounds
+        if (currentTick >= timelineEnd && currentTick <= timelineStart)
         {
-            // Calculate position within visible range for arc placement
-            double visibleProgress = (currentTick - visibleStart).TotalSeconds / currentVisibleSeconds;
+            // Calculate position within the ORIGINAL visible range for arc placement
+            // This ensures ticks appear at the correct position even when range is clamped
+            double visibleProgress = (currentTick - originalVisibleStart).TotalSeconds / currentVisibleSeconds;
             
             // Convert to arc position
             Vector3 tickPosition = CalculateArcPosition((float)visibleProgress);
@@ -666,9 +701,10 @@ public class TimelineController : MonoBehaviour
     // Public API for future event markers
     public Vector3 GetWorldPositionForTime(DateTime time)
     {
-        // Calculate where a specific time appears on the timeline (inverted: scroll=0 is newest)
-        DateTime visibleEnd = timelineStart.AddSeconds(-currentScrollTime);
-        DateTime visibleStart = visibleEnd.AddSeconds(-currentVisibleSeconds);
+        // Calculate where a specific time appears on the timeline (center-based model)
+        DateTime centerTime = timelineStart.AddSeconds(-currentScrollTime);
+        DateTime visibleStart = centerTime.AddSeconds(-currentVisibleSeconds / 2.0);
+        DateTime visibleEnd = centerTime.AddSeconds(currentVisibleSeconds / 2.0);
         
         double visibleProgress = (time - visibleStart).TotalSeconds / currentVisibleSeconds;
         
@@ -680,9 +716,20 @@ public class TimelineController : MonoBehaviour
     
     public bool IsTimeVisible(DateTime time)
     {
-        DateTime visibleEnd = timelineStart.AddSeconds(-currentScrollTime);
-        DateTime visibleStart = visibleEnd.AddSeconds(-currentVisibleSeconds);
+        DateTime centerTime = timelineStart.AddSeconds(-currentScrollTime);
+        DateTime visibleStart = centerTime.AddSeconds(-currentVisibleSeconds / 2.0);
+        DateTime visibleEnd = centerTime.AddSeconds(currentVisibleSeconds / 2.0);
         return time >= visibleStart && time <= visibleEnd;
+    }
+    
+    /// <summary>
+    /// Gets the timestamp at the center of the currently visible timeline arc.
+    /// In the center-based model, this is the temporal point that appears at the physical center of the arc.
+    /// </summary>
+    /// <returns>DateTime representing the center point of the visible timeline</returns>
+    public DateTime GetCenterTimestamp()
+    {
+        return timelineStart.AddSeconds(-currentScrollTime);
     }
     
     bool ShouldSkipLabelDueToLargerLevel(DateTime time, int currentLevel, List<int> visibleLabelLevels)
