@@ -15,18 +15,18 @@ public class HandPinchInteractionManager : MonoBehaviour
     [SerializeField] private Transform rightHandAnchor;
     
     [Header("Interaction Values")]
+    [Tooltip("Accumulated scroll displacement in meters (for debugging).")]
     public float scrollValue = 0f;
-    public float zoomValue = 1f;
+    [Tooltip("Accumulated pinch distance delta in meters (for debugging).")]
+    public float zoomValue = 0f;
     
-    [Header("Scroll Settings")]
-    [SerializeField] private float scrollSensitivity = 2f;
-    [SerializeField] private float scrollMin = -10f;
-    [SerializeField] private float scrollMax = 10f;
+    public float ScrollDeltaThisFrame { get; private set; }
+    public float ZoomDeltaThisFrame   { get; private set; }
     
-    [Header("Zoom Settings")]
-    [SerializeField] private float zoomSensitivity = 0.5f;
-    [SerializeField] private float zoomMin = 0.5f;
-    [SerializeField] private float zoomMax = 3f;
+    // Ratio-based zoom
+    public bool IsTwoHandPinching { get; private set; }
+    public float InitialTwoHandDistance { get; private set; }
+    public float CurrentTwoHandDistance { get; private set; }
     
     [Header("Debug Settings")]
     [SerializeField] private bool enableDebugLogs = true;
@@ -121,6 +121,11 @@ public class HandPinchInteractionManager : MonoBehaviour
     
     void Update()
     {
+        // Reset deltas so downstream systems only respond to new movement
+        ScrollDeltaThisFrame = 0f;
+        ZoomDeltaThisFrame = 0f;
+        IsTwoHandPinching = false;
+        
         if (leftHand == null || rightHand == null || leftHandAnchor == null || rightHandAnchor == null)
         {
             if (Time.time - lastDebugLogTime > 2f)
@@ -271,33 +276,35 @@ public class HandPinchInteractionManager : MonoBehaviour
         
         if (activePinchHand != hand)
         {
+            // First frame of this hand's pinch - initialize position
             activePinchHand = hand;
-            lastLeftPinchPosition = currentPinchPos;
-            lastRightPinchPosition = currentPinchPos;
+            if (hand == leftHand)
+                lastLeftPinchPosition = currentPinchPos;
+            else
+                lastRightPinchPosition = currentPinchPos;
             
             DebugLog($"{handName} hand pinch position initialized at: {currentPinchPos}");
-        }
-        else
-        {
-            Vector3 lastPos = (hand == leftHand) ? lastLeftPinchPosition : lastRightPinchPosition;
-            Vector3 delta = currentPinchPos - lastPos;
-            
-            // Project delta onto horizontal plane relative to camera
-            Transform cameraTransform = Camera.main.transform;
-            Vector3 right = Vector3.ProjectOnPlane(cameraTransform.right, Vector3.up).normalized;
-            float horizontalDelta = Vector3.Dot(delta, right);
-            
-            float oldScrollValue = scrollValue;
-            
-            scrollValue += horizontalDelta * scrollSensitivity;
-            scrollValue = Mathf.Clamp(scrollValue, scrollMin, scrollMax);
-            
-            if (Mathf.Abs(scrollValue - oldScrollValue) > 0.01f)
-            {
-                DebugLog($"SCROLL UPDATE ({handName}) - Pos: {currentPinchPos} | Delta: {horizontalDelta:F4} | {oldScrollValue:F3} → {scrollValue:F3}");
-            }
+            return; // Skip scroll calculation on first frame
         }
         
+        // Calculate scroll delta from previous frame
+        Vector3 lastPos = (hand == leftHand) ? lastLeftPinchPosition : lastRightPinchPosition;
+        Vector3 delta = currentPinchPos - lastPos;
+        
+        // Project delta onto horizontal plane relative to camera
+        Transform cameraTransform = Camera.main.transform;
+        Vector3 right = Vector3.ProjectOnPlane(cameraTransform.right, Vector3.up).normalized;
+        float horizontalDelta = Vector3.Dot(delta, right);
+        
+        scrollValue += horizontalDelta;
+        ScrollDeltaThisFrame += horizontalDelta;
+        
+        if (Mathf.Abs(horizontalDelta) > 0.0001f)
+        {
+            DebugLog($"SCROLL UPDATE ({handName}) - Pos: {currentPinchPos} | Δm: {horizontalDelta:F4} | Total: {scrollValue:F3}m");
+        }
+        
+        // Update position for next frame
         if (hand == leftHand)
             lastLeftPinchPosition = currentPinchPos;
         else
@@ -313,30 +320,31 @@ public class HandPinchInteractionManager : MonoBehaviour
         
         if (!wasTwoHandPinching)
         {
+            InitialTwoHandDistance = currentDistance;
             lastTwoHandDistance = currentDistance;
             wasTwoHandPinching = true;
             
             DebugLog($"Two-hand pinch initialized - Distance: {currentDistance:F3}m");
             DebugLog($"Left Pos: {leftPinchPos} | Right Pos: {rightPinchPos}");
         }
-        else
+        
+        // Update current distance and flag for ratio-based zoom
+        CurrentTwoHandDistance = currentDistance;
+        IsTwoHandPinching = true;
+        
+        // Legacy delta-based tracking for debugging
+        float distanceDelta = currentDistance - lastTwoHandDistance;
+        zoomValue += distanceDelta;
+        ZoomDeltaThisFrame += distanceDelta;
+        
+        if (Mathf.Abs(distanceDelta) > 0.0001f)
         {
-            float distanceDelta = currentDistance - lastTwoHandDistance;
-            float zoomDelta = distanceDelta * zoomSensitivity;
-            
-            float oldZoomValue = zoomValue;
-            
-            zoomValue += zoomDelta;
-            zoomValue = Mathf.Clamp(zoomValue, zoomMin, zoomMax);
-            
-            if (Mathf.Abs(zoomValue - oldZoomValue) > 0.01f)
-            {
-                string zoomDirection = distanceDelta > 0 ? "OUT (apart)" : "IN (together)";
-                DebugLog($"ZOOM {zoomDirection} - Dist: {currentDistance:F3}m | Delta: {distanceDelta:F4} | {oldZoomValue:F3} → {zoomValue:F3}");
-            }
-            
-            lastTwoHandDistance = currentDistance;
+            float ratio = currentDistance / InitialTwoHandDistance;
+            string zoomDirection = distanceDelta > 0 ? "OUT (apart)" : "IN (together)";
+            DebugLog($"ZOOM {zoomDirection} - Dist: {currentDistance:F3}m | Ratio: {ratio:F3} | Δm: {distanceDelta:F4}");
         }
+        
+        lastTwoHandDistance = currentDistance;
     }
     
     private void DebugLog(string message)
@@ -349,8 +357,8 @@ public class HandPinchInteractionManager : MonoBehaviour
     
     void OnGUI()
     {
-        GUILayout.Label($"Scroll Value: {scrollValue:F2}");
-        GUILayout.Label($"Zoom Value: {zoomValue:F2}");
+        GUILayout.Label($"Scroll Value (m): {scrollValue:F2}");
+        GUILayout.Label($"Zoom Value (m): {zoomValue:F2}");
         
         if (leftHand != null && leftHandAnchor != null)
         {

@@ -49,10 +49,14 @@ public class TimelineController : MonoBehaviour
     // Current view state
     private double currentScrollTime; // Time offset in seconds
     private double currentVisibleSeconds; // How many seconds are visible
+    private double zoomStartVisibleSeconds; // Snapshot when zoom gesture starts
     
     // Instancing data
     private Dictionary<int, List<Matrix4x4>> tickMatricesByLevel;
     private Dictionary<int, MaterialPropertyBlock> propertyBlocksByLevel;
+    
+    // Instancing base tick scale
+    private Vector3 basePrefabScale = Vector3.one;
     
     // For future event markers
     public delegate void OnTimelineUpdated(DateTime visibleStart, DateTime visibleEnd, double zoomLevel);
@@ -81,15 +85,26 @@ public class TimelineController : MonoBehaviour
     {
         InitializeTimeline();
         InitializeTickLevels();
-        
+    
         if (pinchManager == null)
         {
             Debug.LogError("HandPinchInteractionManager not assigned!");
         }
-        
+    
+        // Capture the prefab's base scale
+        if (tickPrefab != null)
+        {
+            basePrefabScale = tickPrefab.transform.localScale;
+            DebugLog($"Tick prefab base scale: {basePrefabScale}");
+        }
+        else
+        {
+            Debug.LogWarning("Tick prefab not assigned! Using default scale.");
+        }
+    
         tickMatricesByLevel = new Dictionary<int, List<Matrix4x4>>();
         propertyBlocksByLevel = new Dictionary<int, MaterialPropertyBlock>();
-        
+    
         DebugLog("Timeline initialized");
     }
     
@@ -134,43 +149,25 @@ public class TimelineController : MonoBehaviour
     
     void UpdateTimelineFromInput()
     {
-        // Map zoom value (0.5 to 3) to visible time range
-        // 3.0 = minVisibleSeconds, 0.5 = totalTimelineSeconds
-        // Use inverse exponential mapping for smooth zoom
-        float zoomNormalized = Mathf.InverseLerp(0.5f, 3f, pinchManager.zoomValue);
-        currentVisibleSeconds = Mathf.Lerp(
-            (float)totalTimelineSeconds,
-            minVisibleSeconds,
-            Mathf.Pow(zoomNormalized, 2f) // Quadratic for finer control when zoomed in
-        );
+        bool zoomChanged = ApplyZoomFromInput();
+        bool scrollChanged = ApplyScrollFromInput();
         
-        // Map scroll value (-10 to 10) to time offset
-        // -10 = view the end (oldest), +10 = view the start (newest/now)
-        float scrollNormalized = Mathf.InverseLerp(-10f, 10f, pinchManager.scrollValue);
-        
-        // Calculate the time range we can scroll through
-        double scrollableRange = totalTimelineSeconds - currentVisibleSeconds;
-        scrollableRange = Math.Max(0, scrollableRange);
-        
-        currentScrollTime = scrollableRange * (1.0 - scrollNormalized); // Inverted so right = now
-        
-        // Clamp to valid range
-        currentScrollTime = Math.Clamp(currentScrollTime, 0, scrollableRange);
-        
-        if (enableDebugLogs && Time.frameCount % 30 == 0) // Log every 30 frames
+        // Reset zoom start when gesture ends
+        if (!pinchManager.IsTwoHandPinching)
         {
-            DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
-            DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
-            DebugLog($"View: {visibleStart:MM/dd HH:mm} to {visibleEnd:MM/dd HH:mm} | Range: {currentVisibleSeconds / 3600:F1}hrs | Zoom: {pinchManager.zoomValue:F2}");
+            zoomStartVisibleSeconds = 0;
         }
         
-        // Fire event for external systems
-        if (TimelineUpdated != null)
+        DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
+        DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
+        
+        if (enableDebugLogs && (zoomChanged || scrollChanged) && Time.frameCount % 30 == 0)
         {
-            DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
-            DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
-            TimelineUpdated.Invoke(visibleStart, visibleEnd, currentVisibleSeconds);
+            double secondsPerMeter = GetSecondsPerMeter();
+            DebugLog($"View: {visibleStart:MM/dd HH:mm} to {visibleEnd:MM/dd HH:mm} | Range: {currentVisibleSeconds / 3600:F1}hrs | Seconds/m: {secondsPerMeter:F3}");
         }
+        
+        TimelineUpdated?.Invoke(visibleStart, visibleEnd, currentVisibleSeconds);
     }
     
     void UpdateTickPositions()
@@ -246,64 +243,157 @@ public class TimelineController : MonoBehaviour
         return visibleLevels;
     }
     
-    void GenerateTicksForLevel(int level)
+    bool ApplyZoomFromInput()
     {
-        if (!tickMatricesByLevel.ContainsKey(level))
+        if (!pinchManager.IsTwoHandPinching)
         {
-            tickMatricesByLevel[level] = new List<Matrix4x4>();
+            // Zoom gesture ended, no changes
+            return false;
         }
         
-        TickLevel tickLevel = tickLevels[level];
-        double tickInterval = tickLevel.intervalSeconds;
+        float initialDistance = pinchManager.InitialTwoHandDistance;
+        float currentDistance = pinchManager.CurrentTwoHandDistance;
         
-        // Calculate visible time range
-        DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
-        DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
+        if (initialDistance <= Mathf.Epsilon)
+            return false;
         
-        // Find the first tick time (aligned to interval)
-        DateTime firstTick = AlignToInterval(visibleStart, tickInterval);
-        
-        // Generate ticks
-        DateTime currentTick = firstTick;
-        int tickCount = 0;
-        int maxTicks = targetTickCount; // Safety limit
-        
-        while (currentTick <= visibleEnd && tickCount < maxTicks)
+        // On first frame of zoom gesture, capture the starting visible time
+        if (zoomStartVisibleSeconds <= 0)
         {
-            // Calculate normalized position on timeline (0 = oldest, 1 = newest/now)
-            double timeSinceEnd = (currentTick - timelineEnd).TotalSeconds;
-            double normalizedTime = timeSinceEnd / totalTimelineSeconds;
+            zoomStartVisibleSeconds = currentVisibleSeconds;
+        }
+        
+        // Ratio-based zoom: if hands move apart 2x, show half the time (zoom in)
+        // if hands move together to 0.5x, show 2x the time (zoom out)
+        float ratio = initialDistance / currentDistance;
+        double newVisibleSeconds = zoomStartVisibleSeconds * ratio;
+        double clamped = Clamp(newVisibleSeconds, minVisibleSeconds, totalTimelineSeconds);
+        
+        // Center-based zoom: adjust scroll to keep the center point fixed
+        double oldVisibleSeconds = currentVisibleSeconds;
+        double centerTime = currentScrollTime + (oldVisibleSeconds * 0.5);
+        
+        bool changed = Math.Abs(clamped - currentVisibleSeconds) > 1e-6;
+        if (changed)
+        {
+            currentVisibleSeconds = clamped;
             
-            // Check if this tick is within the visible range
-            if (currentTick >= visibleStart && currentTick <= visibleEnd)
-            {
-                // Calculate position within visible range for arc placement
-                double visibleProgress = (currentTick - visibleStart).TotalSeconds / currentVisibleSeconds;
-                
-                // Convert to arc position
-                Vector3 tickPosition = CalculateArcPosition((float)visibleProgress);
-                Quaternion tickRotation = CalculateArcRotation((float)visibleProgress);
-                
-                // Scale based on level
-                Vector3 tickScale = Vector3.one * tickLevel.scale;
-                
-                // Create transformation matrix
-                Matrix4x4 matrix = Matrix4x4.TRS(tickPosition, tickRotation, tickScale);
-                tickMatricesByLevel[level].Add(matrix);
-                
-                tickCount++;
-            }
-            
-            // Move to next tick
-            currentTick = currentTick.AddSeconds(tickInterval);
+            // Reposition scroll so the center stays in the same place
+            currentScrollTime = centerTime - (currentVisibleSeconds * 0.5);
+            ClampScrollTime();
         }
         
-        if (enableDebugLogs && Time.frameCount % 60 == 0)
-        {
-            DebugLog($"Level {level} ({tickLevel.name}): {tickCount} ticks");
-        }
+        return changed;
     }
     
+    bool ApplyScrollFromInput()
+    {
+        float scrollDeltaMeters = pinchManager.ScrollDeltaThisFrame;
+        if (Mathf.Approximately(scrollDeltaMeters, 0f))
+            return false;
+        
+        double arcLength = GetArcLengthMeters();
+        if (arcLength <= Mathf.Epsilon)
+            return false;
+        
+        // Negate to fix reversed scroll direction
+        double secondsPerMeter = currentVisibleSeconds / arcLength;
+        double scrollSecondsDelta = -scrollDeltaMeters * secondsPerMeter;
+        
+        double scrollableRange = Math.Max(0, totalTimelineSeconds - currentVisibleSeconds);
+        double clamped = Clamp(currentScrollTime + scrollSecondsDelta, 0, scrollableRange);
+        
+        bool changed = Math.Abs(clamped - currentScrollTime) > 1e-6;
+        currentScrollTime = clamped;
+        return changed;
+    }
+    
+    void ClampScrollTime()
+    {
+        double scrollableRange = Math.Max(0, totalTimelineSeconds - currentVisibleSeconds);
+        currentScrollTime = Clamp(currentScrollTime, 0, scrollableRange);
+    }
+    
+    double GetSecondsPerMeter()
+    {
+        double arcLength = GetArcLengthMeters();
+        if (arcLength <= Mathf.Epsilon)
+            return 0d;
+        
+        return currentVisibleSeconds / arcLength;
+    }
+    
+    float GetArcLengthMeters()
+    {
+        float radians = Mathf.Abs(arcDegrees) * Mathf.Deg2Rad;
+        return Mathf.Max(0f, arcRadius * radians);
+    }
+    
+    double Clamp(double value, double min, double max)
+    {
+        if (value < min) return min;
+        if (value > max) return max;
+        return value;
+    }
+    
+ void GenerateTicksForLevel(int level)
+{
+    if (!tickMatricesByLevel.ContainsKey(level))
+    {
+        tickMatricesByLevel[level] = new List<Matrix4x4>();
+    }
+    
+    TickLevel tickLevel = tickLevels[level];
+    double tickInterval = tickLevel.intervalSeconds;
+    
+    // Calculate visible time range
+    DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
+    DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
+    
+    // Find the first tick time (aligned to interval)
+    DateTime firstTick = AlignToInterval(visibleStart, tickInterval);
+    
+    // Generate ticks
+    DateTime currentTick = firstTick;
+    int tickCount = 0;
+    int maxTicks = targetTickCount; // Safety limit
+    
+    while (currentTick <= visibleEnd && tickCount < maxTicks)
+    {
+        // Calculate normalized position on timeline (0 = oldest, 1 = newest/now)
+        double timeSinceEnd = (currentTick - timelineEnd).TotalSeconds;
+        double normalizedTime = timeSinceEnd / totalTimelineSeconds;
+        
+        // Check if this tick is within the visible range
+        if (currentTick >= visibleStart && currentTick <= visibleEnd)
+        {
+            // Calculate position within visible range for arc placement
+            double visibleProgress = (currentTick - visibleStart).TotalSeconds / currentVisibleSeconds;
+            
+            // Convert to arc position
+            Vector3 tickPosition = CalculateArcPosition((float)visibleProgress);
+            Quaternion tickRotation = CalculateArcRotation((float)visibleProgress);
+            
+            // FIXED: Apply both the prefab's base scale AND the level scale multiplier
+            Vector3 tickScale = Vector3.Scale(basePrefabScale, Vector3.one * tickLevel.scale);
+            
+            // Create transformation matrix
+            Matrix4x4 matrix = Matrix4x4.TRS(tickPosition, tickRotation, tickScale);
+            tickMatricesByLevel[level].Add(matrix);
+            
+            tickCount++;
+        }
+        
+        // Move to next tick
+        currentTick = currentTick.AddSeconds(tickInterval);
+    }
+    
+    if (enableDebugLogs && Time.frameCount % 60 == 0)
+    {
+        DebugLog($"Level {level} ({tickLevel.name}): {tickCount} ticks");
+    }
+}
+ 
     DateTime AlignToInterval(DateTime time, double intervalSeconds)
     {
         // Align to the nearest interval boundary before the given time

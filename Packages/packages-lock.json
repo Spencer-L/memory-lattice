@@ -382,7 +382,7 @@
       "url": "https://packages.unity.com"
     },
     "org.nesnausk.gaussian-splatting": {
-      "version": "file:../Assets/GuassianSplatPackage",
+      "version": "file:C:/Users/unico/Documents/Projects/Unity/UnityGaussianSplatting/package",
       "depth": 0,
       "source": "local",
       "dependencies": {

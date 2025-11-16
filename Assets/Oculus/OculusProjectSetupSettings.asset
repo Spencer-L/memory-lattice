@@ -18,7 +18,9 @@ MonoBehaviour:
     - Meta.XR.SDK.edfb6eef6866b340551639f2f2c3213d.MarkedAsFixed.Standalone
     - Meta.XR.SDK.31736735fee7ab217bea57cc359d9f23.MarkedAsFixed.Android
     - Meta.XR.SDK.edfb6eef6866b340551639f2f2c3213d.MarkedAsFixed.Android
-    values: 01010101
+    - Meta.XR.SDK.fb94093919708b05a2082822adc7abd5.Ignored.Standalone
+    - Meta.XR.SDK.e8e95f5b0b55b21a1a42f288eba158eb.Ignored.Standalone
+    values: 010101010101
   intProperties:
     keys: []
     values: 
