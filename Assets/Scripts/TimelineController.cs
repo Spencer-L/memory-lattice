@@ -4,6 +4,9 @@ using System;
 
 public class TimelineController : MonoBehaviour
 {
+    public delegate void TimelineScrolledHandler(float scrollDeltaMeters);
+    public event TimelineScrolledHandler TimelineScrolled;
+
     [Header("Timeline Range")]
     [SerializeField, Tooltip("How far back in time the timeline extends (in months)")]
     private float timelineRangeMonths = 14f;
@@ -407,6 +410,12 @@ public class TimelineController : MonoBehaviour
         
         bool changed = Math.Abs(clamped - currentScrollTime) > 1e-6;
         currentScrollTime = clamped;
+
+        if (changed)
+        {
+            TimelineScrolled?.Invoke(scrollDeltaMeters); // Fire the event
+        }
+
         return changed;
     }
     
