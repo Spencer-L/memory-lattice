@@ -31,12 +31,22 @@ public class BallsManager : MonoBehaviour
     private float dynamicScaleFactor = 1.0f;
     
     [Header("Density Culling")]
-    [SerializeField, Tooltip("Density threshold for culling (balls per square meter)")]
-    private float densityThreshold = 50f;
+    [SerializeField, Tooltip("Base density threshold at reference zoom level (balls per square meter)")]
+    private float baseDensityThreshold = 50f;
+    
+    [SerializeField, Tooltip("Reference zoom level in seconds (density threshold is optimal at this zoom)")]
+    private double referenceZoomSeconds = 300.0; // 5 minutes - matches timeline initial zoom
+    
+    [SerializeField, Tooltip("How aggressively density scales with zoom (0.5 = sqrt scaling, 1.0 = linear)")]
+    private float densityScalingPower = 0.7f;
     
     [Header("Randomization")]
     [SerializeField, Tooltip("Random seed for consistent ball placement")]
     private int randomSeed = 42;
+    
+    [SerializeField, Tooltip("Time distribution bias (1.0 = uniform, >1.0 = more recent, <1.0 = more ancient)")]
+    [Range(0.1f, 5.0f)]
+    private float timeBias = 2.0f;
     
     [Header("Color Palette")]
     [SerializeField, Tooltip("Colors for balls - customizable in Inspector")]
@@ -202,13 +212,25 @@ public class BallsManager : MonoBehaviour
         DateTime timelineEnd = timelineStart.AddMonths(-14); // 14 months back
         double totalSeconds = (timelineStart - timelineEnd).TotalSeconds;
         
+        // Track distribution for debug logging
+        int recentBalls = 0; // Last 25% of timeline
+        
         for (int i = 0; i < totalBallCount; i++)
         {
             BallData ball = new BallData();
             
-            // Random timestamp within timeline range
-            double randomSeconds = randomGenerator.NextDouble() * totalSeconds;
+            // Random timestamp within timeline range with time bias
+            // timeBias > 1.0: more balls toward newer times (timelineStart)
+            // timeBias = 1.0: uniform distribution
+            // timeBias < 1.0: more balls toward older times (timelineEnd)
+            double rawRandom = randomGenerator.NextDouble();
+            double biasedRandom = Math.Pow(rawRandom, 1.0 / timeBias);
+            double randomSeconds = biasedRandom * totalSeconds;
             ball.timestamp = timelineEnd.AddSeconds(randomSeconds);
+            
+            // Track distribution
+            if (randomSeconds > totalSeconds * 0.75)
+                recentBalls++;
             
             // Random distance from timeline
             ball.distanceFromTimeline = Mathf.Lerp(
@@ -233,7 +255,9 @@ public class BallsManager : MonoBehaviour
             allBalls.Add(ball);
         }
         
-        DebugLog($"Generated {allBalls.Count} ball parameters");
+        float recentPercentage = (recentBalls / (float)totalBallCount) * 100f;
+        DebugLog($"Generated {allBalls.Count} ball parameters with time bias {timeBias:F2}");
+        DebugLog($"Distribution: {recentPercentage:F1}% of balls in most recent 25% of timeline");
     }
     
     private void OnTimelineUpdated(DateTime visibleStart, DateTime visibleEnd, double zoomLevel)
@@ -375,22 +399,28 @@ public class BallsManager : MonoBehaviour
         
         if (unitArea <= 0.0001f) return; // Avoid division by zero
         
+        // Calculate zoom-scaled density threshold
+        // When zoomed out (large currentZoomLevel), threshold decreases (more aggressive culling)
+        // When zoomed in (small currentZoomLevel), threshold increases (show more balls)
+        float zoomRatio = (float)(referenceZoomSeconds / currentZoomLevel);
+        float scaledDensityThreshold = baseDensityThreshold * Mathf.Pow(zoomRatio, densityScalingPower);
+        
         // Calculate current density
         float currentDensity = visibleBalls.Count / unitArea;
         
         if (enableDebugLogs && Time.frameCount % 120 == 0)
         {
-            DebugLog($"Density: {currentDensity:F2} balls/m² (threshold: {densityThreshold})");
+            DebugLog($"Zoom: {currentZoomLevel:F0}s | Density: {currentDensity:F2} balls/m² | Threshold: {scaledDensityThreshold:F2} (base: {baseDensityThreshold})");
         }
         
-        // If density exceeds threshold, cull smallest balls
-        if (currentDensity > densityThreshold)
+        // If density exceeds scaled threshold, cull smallest balls
+        if (currentDensity > scaledDensityThreshold)
         {
             // Sort by size parameter (smallest first)
             var sortedBalls = visibleBalls.OrderBy(b => b.sizeParameter).ToList();
             
             // Calculate how many balls to cull
-            int targetBallCount = Mathf.FloorToInt(densityThreshold * unitArea);
+            int targetBallCount = Mathf.FloorToInt(scaledDensityThreshold * unitArea);
             int ballsToCull = Mathf.Max(0, visibleBalls.Count - targetBallCount);
             
             // Deactivate smallest balls
@@ -406,7 +436,7 @@ public class BallsManager : MonoBehaviour
             
             if (enableDebugLogs && Time.frameCount % 120 == 0)
             {
-                DebugLog($"Density culling: deactivated {ballsToCull} smallest balls");
+                DebugLog($"Density culling: deactivated {ballsToCull} smallest balls (zoom factor: {zoomRatio:F2}x)");
             }
         }
     }
@@ -537,9 +567,9 @@ public class BallsManager : MonoBehaviour
     
     public void SetDensityThreshold(float threshold)
     {
-        densityThreshold = threshold;
+        baseDensityThreshold = threshold;
         ApplyDensityCulling();
-        DebugLog($"Density threshold updated to {threshold}");
+        DebugLog($"Base density threshold updated to {threshold}");
     }
     
     // Gizmos for editor visualization
