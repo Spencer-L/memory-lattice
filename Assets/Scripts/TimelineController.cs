@@ -58,11 +58,28 @@ public class TimelineController : MonoBehaviour
     [SerializeField, Tooltip("Minimum angular separation between labels (in degrees)")]
     private float minLabelAngleDegrees = 2f;
     
+    [Header("Reticle Configuration")]
+    [SerializeField, Tooltip("Enable center reticles")]
+    private bool showReticles = true;
+    
+    [SerializeField, Tooltip("Vertical offset for upper reticle")]
+    private float upperReticleOffset = 0.15f;
+    
+    [SerializeField, Tooltip("Vertical offset for lower reticle")]
+    private float lowerReticleOffset = -0.15f;
+    
+    [SerializeField, Tooltip("Scale multiplier for reticle height (makes them taller)")]
+    private float reticleHeightMultiplier = 1.5f;
+    
     [Header("Debug")]
     [SerializeField] private bool enableDebugLogs = true;
     
     // Tick level definitions
     private TickLevel[] tickLevels;
+    
+    // Reticle objects
+    private GameObject upperReticle;
+    private GameObject lowerReticle;
     
     // Timeline state
     private DateTime timelineStart; // NOW
@@ -133,6 +150,7 @@ public class TimelineController : MonoBehaviour
         propertyBlocksByLevel = new Dictionary<int, MaterialPropertyBlock>();
         
         InitializeLabelPool();
+        InitializeReticles();
     
         DebugLog("Timeline initialized");
     }
@@ -202,12 +220,32 @@ public class TimelineController : MonoBehaviour
         }
     }
     
+    void InitializeReticles()
+    {
+        if (!showReticles || tickPrefab == null)
+        {
+            DebugLog("Reticles disabled or tick prefab not assigned");
+            return;
+        }
+        
+        // Create upper reticle
+        upperReticle = Instantiate(tickPrefab, transform);
+        upperReticle.name = "UpperReticle";
+        
+        // Create lower reticle
+        lowerReticle = Instantiate(tickPrefab, transform);
+        lowerReticle.name = "LowerReticle";
+        
+        DebugLog("Reticles initialized");
+    }
+    
     void Update()
     {
         if (pinchManager == null) return;
         
         UpdateTimelineFromInput();
         UpdateTickPositions();
+        UpdateReticlePositions();
         RenderTicks();
     }
     
@@ -321,6 +359,29 @@ public class TimelineController : MonoBehaviour
         
         visibleLevels.Sort();
         return visibleLevels;
+    }
+    
+    void UpdateReticlePositions()
+    {
+        if (!showReticles || upperReticle == null || lowerReticle == null)
+            return;
+        
+        // Center of arc is always at progress = 0.5
+        Vector3 centerPosition = CalculateArcPosition(0.5f);
+        Quaternion centerRotation = CalculateArcRotation(0.5f);
+        
+        // Calculate reticle scale (same as base tick but taller)
+        Vector3 reticleScale = Vector3.Scale(basePrefabScale, new Vector3(1f, reticleHeightMultiplier, 1f));
+        
+        // Position and scale upper reticle
+        upperReticle.transform.position = centerPosition + (Vector3.up * upperReticleOffset);
+        upperReticle.transform.rotation = centerRotation;
+        upperReticle.transform.localScale = reticleScale;
+        
+        // Position and scale lower reticle
+        lowerReticle.transform.position = centerPosition + (Vector3.up * lowerReticleOffset);
+        lowerReticle.transform.rotation = centerRotation;
+        lowerReticle.transform.localScale = reticleScale;
     }
     
     List<int> ApplyAngleBasedLabelCulling(List<int> candidateLevels)
@@ -819,6 +880,19 @@ public class TimelineController : MonoBehaviour
         if (enableDebugLogs)
         {
             Debug.Log($"[Timeline] {message}");
+        }
+    }
+    
+    void OnDestroy()
+    {
+        // Clean up reticles
+        if (upperReticle != null)
+        {
+            Destroy(upperReticle);
+        }
+        if (lowerReticle != null)
+        {
+            Destroy(lowerReticle);
         }
     }
     

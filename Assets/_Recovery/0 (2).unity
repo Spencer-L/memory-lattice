@@ -551,7 +551,7 @@ MonoBehaviour:
   leftHandAnchor: {fileID: 77647774}
   rightHandAnchor: {fileID: 1713958976}
   scrollValue: 0
-  zoomValue: 0
+  zoomValue: 1
   enableDebugLogs: 1
   logEveryFrame: 0
   debugLogInterval: 0.5
@@ -1678,16 +1678,16 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::BallsManager
   timelineController: {fileID: 345928717}
   ballPrefab: {fileID: 1432920945576284506, guid: 6ec5b03ce2db1464f9ee3d219bd2e014, type: 3}
-  totalBallCount: 3000
+  totalBallCount: 300
   minDistanceFromTimeline: 0.1
   maxDistanceFromTimeline: 0.3
   baseBallScale: 0.002
   dynamicScaleFactor: 8
-  baseDensityThreshold: 9000
-  referenceZoomSeconds: 300000
-  densityScalingPower: 0.5
+  baseDensityThreshold: 50
+  referenceZoomSeconds: 300
+  densityScalingPower: 0.7
   randomSeed: 42
-  timeBias: 5
+  timeBias: 2
   colorPalette:
   - {r: 0.8901961, g: 0.11764706, b: 0.14117648, a: 1}
   - {r: 0.9254902, g: 0, b: 0.54901963, a: 1}
