@@ -4,6 +4,9 @@ using System;
 
 public class TimelineController : MonoBehaviour
 {
+    public delegate void TimelineScrolledHandler(float scrollDeltaMeters);
+    public event TimelineScrolledHandler TimelineScrolled;
+
     [Header("Timeline Range")]
     [SerializeField, Tooltip("How far back in time the timeline extends (in months)")]
     private float timelineRangeMonths = 14f;
@@ -35,6 +38,19 @@ public class TimelineController : MonoBehaviour
     [SerializeField, Tooltip("Material for instanced rendering")]
     private Material instancedMaterial;
     
+    [Header("Label Configuration")]
+    [SerializeField, Tooltip("TextMeshPro prefab for tick labels")]
+    private GameObject labelPrefab;
+    
+    [SerializeField, Tooltip("Vertical offset above ticks")]
+    private float labelOffsetY = 0.1f;
+    
+    [SerializeField, Tooltip("Label pool size")]
+    private int labelPoolSize = 100;
+    
+    [SerializeField, Tooltip("Minimum angular separation between labels (in degrees)")]
+    private float minLabelAngleDegrees = 2f;
+    
     [Header("Debug")]
     [SerializeField] private bool enableDebugLogs = true;
     
@@ -57,6 +73,10 @@ public class TimelineController : MonoBehaviour
     
     // Instancing base tick scale
     private Vector3 basePrefabScale = Vector3.one;
+    
+    // Label pooling
+    private Queue<GameObject> labelPool;
+    private List<GameObject> activeLabels;
     
     // For future event markers
     public delegate void OnTimelineUpdated(DateTime visibleStart, DateTime visibleEnd, double zoomLevel);
@@ -104,22 +124,26 @@ public class TimelineController : MonoBehaviour
     
         tickMatricesByLevel = new Dictionary<int, List<Matrix4x4>>();
         propertyBlocksByLevel = new Dictionary<int, MaterialPropertyBlock>();
+        
+        InitializeLabelPool();
     
         DebugLog("Timeline initialized");
     }
     
     void InitializeTimeline()
     {
-        timelineStart = DateTime.Now;
+        // Set timeline end (newest/rightmost) to 9:00 AM Sun Nov 16 2025
+        timelineStart = new DateTime(2025, 11, 16, 9, 0, 0);
         timelineEnd = timelineStart.AddMonths(-(int)timelineRangeMonths);
         totalTimelineSeconds = (timelineStart - timelineEnd).TotalSeconds;
         
-        // Initialize view to show full timeline
-        currentScrollTime = 0;
-        currentVisibleSeconds = totalTimelineSeconds;
+        // Initialize view to show 5 minutes, starting at newest time (scroll=0 is now newest)
+        currentVisibleSeconds = 300; // 5 minutes = 300 seconds
+        currentScrollTime = 0; // 0 = showing the newest/rightmost end
         
         DebugLog($"Timeline range: {timelineEnd:yyyy-MM-dd HH:mm} to {timelineStart:yyyy-MM-dd HH:mm}");
         DebugLog($"Total duration: {totalTimelineSeconds / 86400:F1} days");
+        DebugLog($"Initial view: 5 minutes at newest end");
     }
     
     void InitializeTickLevels()
@@ -127,15 +151,46 @@ public class TimelineController : MonoBehaviour
         tickLevels = new TickLevel[]
         {
             new TickLevel("Second", 0, 1, 0.5f),
-            new TickLevel("10 Seconds", 1, 10, 0.6f),
+            new TickLevel("15 Seconds", 1, 15, 0.6f),
             new TickLevel("Minute", 2, 60, 0.8f),
-            new TickLevel("10 Minutes", 3, 600, 1.0f),
+            new TickLevel("15 Minutes", 3, 900, 1.0f),
             new TickLevel("Hour", 4, 3600, 1.2f),
             new TickLevel("Day", 5, 86400, 1.5f),
             new TickLevel("Week", 6, 604800, 1.8f),
             new TickLevel("Month", 7, 2592000, 2.2f), // ~30 days
             new TickLevel("Year", 8, 31536000, 3.0f)
         };
+    }
+    
+    void InitializeLabelPool()
+    {
+        labelPool = new Queue<GameObject>();
+        activeLabels = new List<GameObject>();
+        
+        if (labelPrefab != null)
+        {
+            for (int i = 0; i < labelPoolSize; i++)
+            {
+                GameObject label = Instantiate(labelPrefab, transform);
+                label.SetActive(false);
+                labelPool.Enqueue(label);
+            }
+            
+            // Check if we can find TextMeshPro component in prefab
+            TMPro.TextMeshPro testText = labelPrefab.GetComponentInChildren<TMPro.TextMeshPro>();
+            if (testText != null)
+            {
+                DebugLog($"Label pool initialized with {labelPoolSize} labels. TextMeshPro found in prefab.");
+            }
+            else
+            {
+                Debug.LogWarning("[Timeline] Label prefab assigned but no TextMeshPro component found in prefab or children!");
+            }
+        }
+        else
+        {
+            Debug.LogWarning("[Timeline] Label prefab not assigned!");
+        }
     }
     
     void Update()
@@ -158,8 +213,9 @@ public class TimelineController : MonoBehaviour
             zoomStartVisibleSeconds = 0;
         }
         
-        DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
-        DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
+        // Inverted: scroll=0 is newest (timelineStart), higher values go back in time
+        DateTime visibleEnd = timelineStart.AddSeconds(-currentScrollTime);
+        DateTime visibleStart = visibleEnd.AddSeconds(-currentVisibleSeconds);
         
         if (enableDebugLogs && (zoomChanged || scrollChanged) && Time.frameCount % 30 == 0)
         {
@@ -172,6 +228,9 @@ public class TimelineController : MonoBehaviour
     
     void UpdateTickPositions()
     {
+        // Return all labels to pool
+        ReturnAllLabelsToPool();
+        
         // Clear previous frame's data
         foreach (var kvp in tickMatricesByLevel)
         {
@@ -179,12 +238,23 @@ public class TimelineController : MonoBehaviour
         }
         
         // Determine which tick levels to show based on current zoom
-        List<int> visibleLevels = DetermineVisibleTickLevels();
+        List<int> visibleTickLevels = DetermineVisibleTickLevels();
+        
+        // Apply angular culling to determine which levels should have labels
+        // (This doesn't affect tick rendering, only labels)
+        List<int> visibleLabelLevels = ApplyAngleBasedLabelCulling(new List<int>(visibleTickLevels));
+        
+        // Find the smallest (finest granularity) LABEL level - we won't label this one
+        int smallestLabelLevel = visibleLabelLevels.Count > 0 ? visibleLabelLevels[0] : -1;
         
         // Generate ticks for each visible level
-        foreach (int level in visibleLevels)
+        foreach (int level in visibleTickLevels)
         {
-            GenerateTicksForLevel(level);
+            // Only create labels if:
+            // 1. This level is in the label levels list (passed angular culling)
+            // 2. This level is not the smallest label level
+            bool shouldCreateLabels = visibleLabelLevels.Contains(level) && (level != smallestLabelLevel);
+            GenerateTicksForLevel(level, shouldCreateLabels, visibleLabelLevels);
         }
     }
     
@@ -243,6 +313,41 @@ public class TimelineController : MonoBehaviour
         return visibleLevels;
     }
     
+    List<int> ApplyAngleBasedLabelCulling(List<int> candidateLevels)
+    {
+        if (candidateLevels.Count == 0) return candidateLevels;
+        
+        // Calculate the angular spacing between ticks for the finest (smallest) level
+        int finestLevel = candidateLevels[0];
+        double finestInterval = tickLevels[finestLevel].intervalSeconds;
+        
+        // Calculate how much angle each tick interval represents
+        // arcDegrees is the total arc span, currentVisibleSeconds is the time span
+        double degreesPerSecond = arcDegrees / currentVisibleSeconds;
+        double angularSpacing = finestInterval * degreesPerSecond;
+        
+        if (enableDebugLogs && Time.frameCount % 60 == 0)
+        {
+            DebugLog($"Angle-based culling: Finest level {finestLevel} ({tickLevels[finestLevel].name}) has {angularSpacing:F2}° spacing (min: {minLabelAngleDegrees}°)");
+        }
+        
+        // If the angular spacing is too small, remove the finest level
+        if (angularSpacing < minLabelAngleDegrees)
+        {
+            if (enableDebugLogs && Time.frameCount % 60 == 0)
+            {
+                DebugLog($"Culling level {finestLevel} ({tickLevels[finestLevel].name}) - angular spacing {angularSpacing:F2}° < minimum {minLabelAngleDegrees}°");
+            }
+            
+            candidateLevels.RemoveAt(0); // Remove finest level
+            
+            // Recursively check the next finest level
+            return ApplyAngleBasedLabelCulling(candidateLevels);
+        }
+        
+        return candidateLevels;
+    }
+    
     bool ApplyZoomFromInput()
     {
         if (!pinchManager.IsTwoHandPinching)
@@ -296,15 +401,21 @@ public class TimelineController : MonoBehaviour
         if (arcLength <= Mathf.Epsilon)
             return false;
         
-        // Negate to fix reversed scroll direction
+        // Direct mapping: scrolling right moves timeline right (forward in time, toward scroll=0/newest)
         double secondsPerMeter = currentVisibleSeconds / arcLength;
-        double scrollSecondsDelta = -scrollDeltaMeters * secondsPerMeter;
+        double scrollSecondsDelta = scrollDeltaMeters * secondsPerMeter;
         
         double scrollableRange = Math.Max(0, totalTimelineSeconds - currentVisibleSeconds);
         double clamped = Clamp(currentScrollTime + scrollSecondsDelta, 0, scrollableRange);
         
         bool changed = Math.Abs(clamped - currentScrollTime) > 1e-6;
         currentScrollTime = clamped;
+
+        if (changed)
+        {
+            TimelineScrolled?.Invoke(scrollDeltaMeters); // Fire the event
+        }
+
         return changed;
     }
     
@@ -336,7 +447,7 @@ public class TimelineController : MonoBehaviour
         return value;
     }
     
- void GenerateTicksForLevel(int level)
+ void GenerateTicksForLevel(int level, bool shouldCreateLabels, List<int> visibleLabelLevels)
 {
     if (!tickMatricesByLevel.ContainsKey(level))
     {
@@ -346,9 +457,9 @@ public class TimelineController : MonoBehaviour
     TickLevel tickLevel = tickLevels[level];
     double tickInterval = tickLevel.intervalSeconds;
     
-    // Calculate visible time range
-    DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
-    DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
+    // Calculate visible time range (inverted: scroll=0 is newest)
+    DateTime visibleEnd = timelineStart.AddSeconds(-currentScrollTime);
+    DateTime visibleStart = visibleEnd.AddSeconds(-currentVisibleSeconds);
     
     // Find the first tick time (aligned to interval)
     DateTime firstTick = AlignToInterval(visibleStart, tickInterval);
@@ -380,6 +491,56 @@ public class TimelineController : MonoBehaviour
             // Create transformation matrix
             Matrix4x4 matrix = Matrix4x4.TRS(tickPosition, tickRotation, tickScale);
             tickMatricesByLevel[level].Add(matrix);
+            
+            // Create label if requested and label prefab is assigned
+            if (shouldCreateLabels && labelPrefab != null)
+            {
+                // Check if this tick coincides with a larger granularity level
+                // If so, skip this label (the larger level will show its label instead)
+                bool shouldSkipLabel = ShouldSkipLabelDueToLargerLevel(currentTick, level, visibleLabelLevels);
+                
+                if (!shouldSkipLabel)
+                {
+                    GameObject label = GetLabelFromPool();
+                    
+                    // Position label above the tick
+                    Vector3 labelPosition = tickPosition + (Vector3.up * labelOffsetY);
+                    label.transform.position = labelPosition;
+                    
+                    // Calculate label rotation - should face outward from arc center (opposite of tick)
+                    // Ticks face inward with -angle, so labels face outward with +angle (180 degree difference)
+                    float angle = Mathf.Lerp(-arcDegrees / 2f, arcDegrees / 2f, (float)visibleProgress);
+                    Quaternion labelRotation = Quaternion.Euler(0f, angle + 180f, 0f);
+                    label.transform.rotation = transform.rotation * labelRotation;
+                    
+                    // Set label text - search recursively in children for TextMeshPro
+                    TMPro.TextMeshPro textMesh = label.GetComponentInChildren<TMPro.TextMeshPro>();
+                    if (textMesh != null)
+                    {
+                        string labelText = FormatTickLabel(currentTick, level);
+                        textMesh.text = labelText;
+                        
+                        if (enableDebugLogs && tickCount < 3) // Log first 3 labels per level
+                        {
+                            DebugLog($"Label created for {currentTick:yyyy-MM-dd HH:mm:ss} at level {level} ({tickLevel.name}): '{labelText}' at position {labelPosition}");
+                        }
+                    }
+                    else
+                    {
+                        if (tickCount == 0) // Log error only once per level
+                        {
+                            Debug.LogWarning($"[Timeline] TextMeshPro component not found in label prefab or its children!");
+                        }
+                    }
+                }
+                else
+                {
+                    if (enableDebugLogs && tickCount < 3)
+                    {
+                        DebugLog($"Label SKIPPED for {currentTick:yyyy-MM-dd HH:mm:ss} at level {level} ({tickLevel.name}) - coincides with larger level");
+                    }
+                }
+            }
             
             tickCount++;
         }
@@ -490,9 +651,9 @@ public class TimelineController : MonoBehaviour
     // Public API for future event markers
     public Vector3 GetWorldPositionForTime(DateTime time)
     {
-        // Calculate where a specific time appears on the timeline
-        double timeSinceEnd = (time - timelineEnd).TotalSeconds;
-        DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
+        // Calculate where a specific time appears on the timeline (inverted: scroll=0 is newest)
+        DateTime visibleEnd = timelineStart.AddSeconds(-currentScrollTime);
+        DateTime visibleStart = visibleEnd.AddSeconds(-currentVisibleSeconds);
         
         double visibleProgress = (time - visibleStart).TotalSeconds / currentVisibleSeconds;
         
@@ -504,9 +665,91 @@ public class TimelineController : MonoBehaviour
     
     public bool IsTimeVisible(DateTime time)
     {
-        DateTime visibleStart = timelineEnd.AddSeconds(currentScrollTime);
-        DateTime visibleEnd = visibleStart.AddSeconds(currentVisibleSeconds);
+        DateTime visibleEnd = timelineStart.AddSeconds(-currentScrollTime);
+        DateTime visibleStart = visibleEnd.AddSeconds(-currentVisibleSeconds);
         return time >= visibleStart && time <= visibleEnd;
+    }
+    
+    bool ShouldSkipLabelDueToLargerLevel(DateTime time, int currentLevel, List<int> visibleLabelLevels)
+    {
+        // Check if this time coincides with any VISIBLE larger granularity level
+        // Only check levels that are actually visible (more efficient and correct)
+        foreach (int visibleLevel in visibleLabelLevels)
+        {
+            // Only check levels larger (coarser) than current level
+            if (visibleLevel <= currentLevel) continue;
+            
+            double largerInterval = tickLevels[visibleLevel].intervalSeconds;
+            
+            // Check if this time is perfectly aligned to the larger interval
+            // by seeing if the time from epoch is divisible by the interval
+            long timeTicks = time.Ticks;
+            long intervalTicks = (long)(largerInterval * TimeSpan.TicksPerSecond);
+            
+            // If perfectly divisible, this time coincides with the larger visible level
+            if (timeTicks % intervalTicks == 0)
+            {
+                return true; // Skip this label - the larger level will show it
+            }
+        }
+        
+        return false; // No coincidence found with visible larger levels, show the label
+    }
+    
+    string FormatTickLabel(DateTime time, int level)
+    {
+        switch (level)
+        {
+            case 0: // Second
+                return $"{time.Second}s";
+            case 1: // 15 Seconds
+                return $"{time.Second}s";
+            case 2: // Minute
+                return $"{time.Minute}m";
+            case 3: // 15 Minutes
+                return $"{time.Minute}m";
+            case 4: // Hour
+                return time.ToString("HH:mm");
+            case 5: // Day
+                return time.ToString("HH:mm");
+            case 6: // Week
+                return time.ToString("MMM dd");
+            case 7: // Month
+                return time.ToString("MMM yyyy");
+            case 8: // Year
+                return time.ToString("yyyy");
+            default:
+                return "";
+        }
+    }
+    
+    GameObject GetLabelFromPool()
+    {
+        if (labelPool.Count > 0)
+        {
+            GameObject label = labelPool.Dequeue();
+            label.SetActive(true);
+            activeLabels.Add(label);
+            return label;
+        }
+        // Pool exhausted, create new label
+        if (enableDebugLogs)
+        {
+            Debug.LogWarning($"[Timeline] Label pool exhausted! Creating new label. Consider increasing pool size.");
+        }
+        GameObject newLabel = Instantiate(labelPrefab, transform);
+        activeLabels.Add(newLabel);
+        return newLabel;
+    }
+    
+    void ReturnAllLabelsToPool()
+    {
+        foreach (GameObject label in activeLabels)
+        {
+            label.SetActive(false);
+            labelPool.Enqueue(label);
+        }
+        activeLabels.Clear();
     }
     
     private void DebugLog(string message)
