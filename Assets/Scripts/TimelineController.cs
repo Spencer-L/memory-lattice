@@ -45,6 +45,9 @@ public class TimelineController : MonoBehaviour
     [SerializeField, Tooltip("Label pool size")]
     private int labelPoolSize = 100;
     
+    [SerializeField, Tooltip("Minimum angular separation between labels (in degrees)")]
+    private float minLabelAngleDegrees = 2f;
+    
     [Header("Debug")]
     [SerializeField] private bool enableDebugLogs = true;
     
@@ -232,16 +235,23 @@ public class TimelineController : MonoBehaviour
         }
         
         // Determine which tick levels to show based on current zoom
-        List<int> visibleLevels = DetermineVisibleTickLevels();
+        List<int> visibleTickLevels = DetermineVisibleTickLevels();
         
-        // Find the smallest (finest granularity) level - we won't label this one
-        int smallestLevel = visibleLevels.Count > 0 ? visibleLevels[0] : -1;
+        // Apply angular culling to determine which levels should have labels
+        // (This doesn't affect tick rendering, only labels)
+        List<int> visibleLabelLevels = ApplyAngleBasedLabelCulling(new List<int>(visibleTickLevels));
+        
+        // Find the smallest (finest granularity) LABEL level - we won't label this one
+        int smallestLabelLevel = visibleLabelLevels.Count > 0 ? visibleLabelLevels[0] : -1;
         
         // Generate ticks for each visible level
-        foreach (int level in visibleLevels)
+        foreach (int level in visibleTickLevels)
         {
-            bool shouldCreateLabels = (level != smallestLevel);
-            GenerateTicksForLevel(level, shouldCreateLabels);
+            // Only create labels if:
+            // 1. This level is in the label levels list (passed angular culling)
+            // 2. This level is not the smallest label level
+            bool shouldCreateLabels = visibleLabelLevels.Contains(level) && (level != smallestLabelLevel);
+            GenerateTicksForLevel(level, shouldCreateLabels, visibleLabelLevels);
         }
     }
     
@@ -298,6 +308,41 @@ public class TimelineController : MonoBehaviour
         
         visibleLevels.Sort();
         return visibleLevels;
+    }
+    
+    List<int> ApplyAngleBasedLabelCulling(List<int> candidateLevels)
+    {
+        if (candidateLevels.Count == 0) return candidateLevels;
+        
+        // Calculate the angular spacing between ticks for the finest (smallest) level
+        int finestLevel = candidateLevels[0];
+        double finestInterval = tickLevels[finestLevel].intervalSeconds;
+        
+        // Calculate how much angle each tick interval represents
+        // arcDegrees is the total arc span, currentVisibleSeconds is the time span
+        double degreesPerSecond = arcDegrees / currentVisibleSeconds;
+        double angularSpacing = finestInterval * degreesPerSecond;
+        
+        if (enableDebugLogs && Time.frameCount % 60 == 0)
+        {
+            DebugLog($"Angle-based culling: Finest level {finestLevel} ({tickLevels[finestLevel].name}) has {angularSpacing:F2}° spacing (min: {minLabelAngleDegrees}°)");
+        }
+        
+        // If the angular spacing is too small, remove the finest level
+        if (angularSpacing < minLabelAngleDegrees)
+        {
+            if (enableDebugLogs && Time.frameCount % 60 == 0)
+            {
+                DebugLog($"Culling level {finestLevel} ({tickLevels[finestLevel].name}) - angular spacing {angularSpacing:F2}° < minimum {minLabelAngleDegrees}°");
+            }
+            
+            candidateLevels.RemoveAt(0); // Remove finest level
+            
+            // Recursively check the next finest level
+            return ApplyAngleBasedLabelCulling(candidateLevels);
+        }
+        
+        return candidateLevels;
     }
     
     bool ApplyZoomFromInput()
@@ -393,7 +438,7 @@ public class TimelineController : MonoBehaviour
         return value;
     }
     
- void GenerateTicksForLevel(int level, bool shouldCreateLabels)
+ void GenerateTicksForLevel(int level, bool shouldCreateLabels, List<int> visibleLabelLevels)
 {
     if (!tickMatricesByLevel.ContainsKey(level))
     {
@@ -443,7 +488,7 @@ public class TimelineController : MonoBehaviour
             {
                 // Check if this tick coincides with a larger granularity level
                 // If so, skip this label (the larger level will show its label instead)
-                bool shouldSkipLabel = ShouldSkipLabelDueToLargerLevel(currentTick, level);
+                bool shouldSkipLabel = ShouldSkipLabelDueToLargerLevel(currentTick, level, visibleLabelLevels);
                 
                 if (!shouldSkipLabel)
                 {
@@ -616,27 +661,30 @@ public class TimelineController : MonoBehaviour
         return time >= visibleStart && time <= visibleEnd;
     }
     
-    bool ShouldSkipLabelDueToLargerLevel(DateTime time, int currentLevel)
+    bool ShouldSkipLabelDueToLargerLevel(DateTime time, int currentLevel, List<int> visibleLabelLevels)
     {
-        // Check if this time coincides with any larger granularity level
-        // We iterate through levels larger than current level
-        for (int largerLevel = currentLevel + 1; largerLevel < tickLevels.Length; largerLevel++)
+        // Check if this time coincides with any VISIBLE larger granularity level
+        // Only check levels that are actually visible (more efficient and correct)
+        foreach (int visibleLevel in visibleLabelLevels)
         {
-            double largerInterval = tickLevels[largerLevel].intervalSeconds;
+            // Only check levels larger (coarser) than current level
+            if (visibleLevel <= currentLevel) continue;
+            
+            double largerInterval = tickLevels[visibleLevel].intervalSeconds;
             
             // Check if this time is perfectly aligned to the larger interval
             // by seeing if the time from epoch is divisible by the interval
             long timeTicks = time.Ticks;
             long intervalTicks = (long)(largerInterval * TimeSpan.TicksPerSecond);
             
-            // If perfectly divisible, this time coincides with the larger level
+            // If perfectly divisible, this time coincides with the larger visible level
             if (timeTicks % intervalTicks == 0)
             {
                 return true; // Skip this label - the larger level will show it
             }
         }
         
-        return false; // No coincidence found, show the label
+        return false; // No coincidence found with visible larger levels, show the label
     }
     
     string FormatTickLabel(DateTime time, int level)

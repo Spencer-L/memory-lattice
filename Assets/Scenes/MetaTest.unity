@@ -225,6 +225,7 @@ MonoBehaviour:
   labelPrefab: {fileID: 4847520129325279723, guid: b01d2c8cbae6c274b8a5200a7df9f79a, type: 3}
   labelOffsetY: 0.016
   labelPoolSize: 100
+  minLabelAngleDegrees: 0.2
   enableDebugLogs: 1
 --- !u!4 &345928718
 Transform:
