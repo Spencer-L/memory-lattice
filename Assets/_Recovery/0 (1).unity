@@ -223,7 +223,7 @@ MonoBehaviour:
   targetTickCount: 1000
   instancedMaterial: {fileID: 2100000, guid: e2f3dfe883e085a4f95a857cc8c91f6a, type: 2}
   labelPrefab: {fileID: 4847520129325279723, guid: b01d2c8cbae6c274b8a5200a7df9f79a, type: 3}
-  labelOffsetY: 0.016
+  labelOffsetY: 0.03
   labelPoolSize: 100
   enableDebugLogs: 1
 --- !u!4 &345928718
@@ -1682,7 +1682,7 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: 2588455583340056180, guid: 4a4863d9e9cba4449a82351bd4c94077, type: 3}
       propertyPath: _viewUUID
-      value: 6111daf4-e98c-4f3a-869a-fd654f30b6cc
+      value: 83f5b2e3-aec2-4397-9803-185488c5859f
       objectReference: {fileID: 0}
     - target: {fileID: 6380873794587653641, guid: 4a4863d9e9cba4449a82351bd4c94077, type: 3}
       propertyPath: m_LocalPosition.x
