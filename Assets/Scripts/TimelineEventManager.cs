@@ -225,15 +225,15 @@ public class TimelineEventManager : MonoBehaviour
         
         try
         {
+            if (typeNames.Count >= 1)
+                AddEvent(centerTime.AddHours(-6), typeNames[0], "Kitchen");
+
             if (typeNames.Count >= 2)
-                AddEvent(centerTime.AddHours(-12), typeNames[1], "Kitchen");
+                AddEvent(centerTime.AddDays(-5), typeNames[1], "MIT");
             
             if (typeNames.Count >= 3)
-                AddEvent(centerTime.AddMonths(-9), typeNames[2], "MIT");
-            
-            if (typeNames.Count >= 1)
-                AddEvent(centerTime.AddMinutes(-15), typeNames[0], "Stanford");
-            
+                AddEvent(centerTime.AddMinutes(-15), typeNames[2], "Stanford");
+
             Debug.Log($"[TimelineEventManager] Created {activeMarkers.Count} example events around {centerTime:yyyy-MM-dd HH:mm:ss}");
         }
         catch (ArgumentOutOfRangeException ex)

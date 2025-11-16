@@ -7,11 +7,27 @@ using System;
 /// </summary>
 public class TimelineEventMarker : MonoBehaviour
 {
+    [Header("Position Offset Settings")]
+    [SerializeField, Tooltip("Minimum offset from timeline position")]
+    private Vector3 minOffset = new Vector3(-0.1f, -0.1f, -0.1f);
+    
+    [SerializeField, Tooltip("Maximum offset from timeline position")]
+    private Vector3 maxOffset = new Vector3(0.1f, 0.1f, 0.1f);
+    
+    [Header("Connection Line Settings")]
+    [SerializeField, Tooltip("Width of the line connecting marker to timeline")]
+    private float lineWidth = 0.002f;
+    
+    [SerializeField, Tooltip("Color of the connection line")]
+    private Color lineColor = Color.white;
+    
     public DateTime EventTime { get; set; }
     public string EventLabel { get; set; }
     public string MarkerType { get; private set; }
     
     private TimelineController timeline;
+    private Vector3 randomOffset; // Stored offset that stays consistent for this marker
+    private LineRenderer connectionLine; // Line connecting marker to timeline position
     
     /// <summary>
     /// Initialize the event marker with a specific time and label
@@ -23,12 +39,50 @@ public class TimelineEventMarker : MonoBehaviour
         EventLabel = label;
         MarkerType = markerType;
         
+        // Generate a random offset for this marker that will be consistent
+        randomOffset = new Vector3(
+            UnityEngine.Random.Range(minOffset.x, maxOffset.x),
+            UnityEngine.Random.Range(minOffset.y, maxOffset.y),
+            UnityEngine.Random.Range(minOffset.z, maxOffset.z)
+        );
+        
+        // Create and configure the connection line
+        SetupConnectionLine();
+        
         // Subscribe to timeline updates for efficient position updates
         if (timeline != null)
         {
             timeline.TimelineUpdated += OnTimelineUpdated;
             UpdatePosition();
         }
+    }
+    
+    /// <summary>
+    /// Setup the LineRenderer component for the connection line
+    /// </summary>
+    void SetupConnectionLine()
+    {
+        // Check if LineRenderer already exists
+        connectionLine = GetComponent<LineRenderer>();
+        if (connectionLine == null)
+        {
+            connectionLine = gameObject.AddComponent<LineRenderer>();
+        }
+        
+        // Configure the line renderer
+        connectionLine.positionCount = 2;
+        connectionLine.startWidth = lineWidth;
+        connectionLine.endWidth = lineWidth;
+        connectionLine.startColor = lineColor;
+        connectionLine.endColor = lineColor;
+        
+        // Use unlit shader so the line appears white regardless of lighting
+        connectionLine.material = new Material(Shader.Find("Sprites/Default"));
+        connectionLine.material.color = lineColor;
+        
+        // Disable shadows for the line
+        connectionLine.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        connectionLine.receiveShadows = false;
     }
     
     void OnDestroy()
@@ -55,11 +109,20 @@ public class TimelineEventMarker : MonoBehaviour
         if (isVisible)
         {
             // Get the world position for this specific time
-            Vector3 position = timeline.GetWorldPositionForTime(EventTime);
+            Vector3 timelinePosition = timeline.GetWorldPositionForTime(EventTime);
             
-            if (position != Vector3.zero)
+            if (timelinePosition != Vector3.zero)
             {
-                transform.position = position;
+                // Apply the random offset to position the marker near but not on the timeline
+                Vector3 markerPosition = timelinePosition + randomOffset;
+                transform.position = markerPosition;
+                
+                // Update the connection line between marker and timeline position
+                if (connectionLine != null)
+                {
+                    connectionLine.SetPosition(0, markerPosition); // Start at marker
+                    connectionLine.SetPosition(1, timelinePosition); // End at timeline position
+                }
             }
         }
     }
