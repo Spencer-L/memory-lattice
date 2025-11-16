@@ -38,11 +38,18 @@ public class TimelineEventManager : MonoBehaviour
         
         [Tooltip("Use random position instead")]
         public bool randomizePosition = false;
+        
+        [Header("Memory Association")]
+        [Tooltip("Index of the splat to open when this marker is selected (-1 = none)")]
+        public int splatIndex = -1;
     }
     
     [Header("References")]
     [SerializeField, Tooltip("Reference to the TimelineController")]
     private TimelineController timelineController;
+    
+    [SerializeField, Tooltip("Reference to the MemoryManager")]
+    private MemoryManager memoryManager;
     
     [Header("Event Marker Types")]
     [SerializeField, Tooltip("Different types of event markers with their prefabs")]
@@ -61,10 +68,19 @@ public class TimelineEventManager : MonoBehaviour
     
     void Start()
     {
+        Debug.Log($"[MARKER→SPLAT] ===== INITIALIZATION =====");
+        Debug.Log($"[MARKER→SPLAT] TimelineController: {(timelineController != null ? "ASSIGNED" : "NULL")}");
+        Debug.Log($"[MARKER→SPLAT] MemoryManager: {(memoryManager != null ? "ASSIGNED ✓" : "NULL ⚠")}");
+        
         if (timelineController == null)
         {
-            Debug.LogError("[TimelineEventManager] TimelineController not assigned!");
+            Debug.LogError("[MARKER→SPLAT] TimelineController not assigned!");
             return;
+        }
+        
+        if (memoryManager == null)
+        {
+            Debug.LogWarning("[MARKER→SPLAT] ⚠ MemoryManager not assigned - markers will not be able to open splats!");
         }
         
         // Build lookup dictionary for marker types
@@ -118,8 +134,9 @@ public class TimelineEventManager : MonoBehaviour
     /// <param name="label">Optional label for the event</param>
     /// <param name="distance">Radial distance from timeline arc (0-2m). Use -1 for random.</param>
     /// <param name="angle">Angle around the tangent (0-360 degrees). Use -1 for random.</param>
+    /// <param name="splatIndex">Index of the splat to open when selected. Use -1 for none.</param>
     /// <returns>The created TimelineEventMarker instance</returns>
-    public TimelineEventMarker AddEvent(DateTime eventTime, string markerTypeName, string label = "", float distance = -1f, float angle = -1f)
+    public TimelineEventMarker AddEvent(DateTime eventTime, string markerTypeName, string label = "", float distance = -1f, float angle = -1f, int splatIndex = -1)
     {
         if (!markerTypeLookup.ContainsKey(markerTypeName))
         {
@@ -163,7 +180,26 @@ public class TimelineEventManager : MonoBehaviour
         
         activeMarkers.Add(marker);
         
-        Debug.Log($"[TimelineEventManager] Added {markerTypeName} event at {eventTime:yyyy-MM-dd HH:mm:ss} - {label} (distance: {(distance >= 0 ? distance.ToString("F2") : "random")}, angle: {(angle >= 0 ? angle.ToString("F1") + "°" : "random")})");
+        // Subscribe to marker selection event to open associated splat
+        if (splatIndex >= 0)
+        {
+            if (memoryManager != null)
+            {
+                int capturedIndex = splatIndex; // Capture for closure
+                marker.onMarkerSelected.AddListener((selectedMarker) => OnMarkerSelected(selectedMarker, capturedIndex));
+                Debug.Log($"[MARKER→SPLAT] ✓ Added {markerTypeName} event at {eventTime:yyyy-MM-dd HH:mm:ss} - {label}");
+                Debug.Log($"[MARKER→SPLAT]   Position: distance={distance:F2}, angle={angle:F1}°, SPLAT INDEX={splatIndex}");
+                Debug.Log($"[MARKER→SPLAT]   ✓ Subscribed to onMarkerSelected event for splat index {splatIndex}");
+            }
+            else
+            {
+                Debug.LogWarning($"[MARKER→SPLAT] ⚠ Cannot subscribe to marker selection - MemoryManager is NULL! Marker: {label}, Splat: {splatIndex}");
+            }
+        }
+        else
+        {
+            Debug.Log($"[MARKER→SPLAT] Added {markerTypeName} event at {eventTime:yyyy-MM-dd HH:mm:ss} - {label} (NO SPLAT ASSOCIATED, index={splatIndex})");
+        }
         
         return marker;
     }
@@ -175,8 +211,9 @@ public class TimelineEventManager : MonoBehaviour
     /// <param name="label">Optional label for the event</param>
     /// <param name="distance">Radial distance from timeline arc (0-2m). Use -1 for random.</param>
     /// <param name="angle">Angle around the tangent (0-360 degrees). Use -1 for random.</param>
+    /// <param name="splatIndex">Index of the splat to open when selected. Use -1 for none.</param>
     /// <returns>The created TimelineEventMarker instance</returns>
-    public TimelineEventMarker AddEvent(DateTime eventTime, string label = "", float distance = -1f, float angle = -1f)
+    public TimelineEventMarker AddEvent(DateTime eventTime, string label = "", float distance = -1f, float angle = -1f, int splatIndex = -1)
     {
         if (markerTypeLookup.Count == 0)
         {
@@ -192,7 +229,7 @@ public class TimelineEventManager : MonoBehaviour
             break;
         }
         
-        return AddEvent(eventTime, firstType, label, distance, angle);
+        return AddEvent(eventTime, firstType, label, distance, angle, splatIndex);
     }
     
     /// <summary>
@@ -205,6 +242,27 @@ public class TimelineEventManager : MonoBehaviour
             activeMarkers.Remove(marker);
             Destroy(marker.gameObject);
         }
+    }
+    
+    /// <summary>
+    /// Called when a marker is selected. Opens the associated splat in the MemoryManager.
+    /// </summary>
+    private void OnMarkerSelected(TimelineEventMarker marker, int splatIndex)
+    {
+        Debug.Log($"[MARKER→SPLAT] ===== OnMarkerSelected CALLED =====");
+        Debug.Log($"[MARKER→SPLAT]   Marker: {marker?.EventLabel ?? "NULL"}");
+        Debug.Log($"[MARKER→SPLAT]   Splat Index: {splatIndex}");
+        Debug.Log($"[MARKER→SPLAT]   MemoryManager: {(memoryManager != null ? "ASSIGNED" : "NULL")}");
+        
+        if (memoryManager == null)
+        {
+            Debug.LogError("[MARKER→SPLAT] ⚠⚠⚠ CANNOT OPEN SPLAT - MemoryManager is NULL!");
+            return;
+        }
+        
+        Debug.Log($"[MARKER→SPLAT] → Calling memoryManager.OpenSplat({splatIndex})...");
+        memoryManager.OpenSplat(splatIndex);
+        Debug.Log($"[MARKER→SPLAT] ← memoryManager.OpenSplat({splatIndex}) completed");
     }
     
     /// <summary>
@@ -288,7 +346,7 @@ public class TimelineEventManager : MonoBehaviour
                     float distance = config.randomizePosition ? -1f : config.distance;
                     float angle = config.randomizePosition ? -1f : config.angle;
                     
-                    AddEvent(eventTime, config.markerType, config.eventName, distance, angle);
+                    AddEvent(eventTime, config.markerType, config.eventName, distance, angle, config.splatIndex);
                 }
                 
                 Debug.Log($"[TimelineEventManager] Created {activeMarkers.Count} configured events around {centerTime:yyyy-MM-dd HH:mm:ss}");
@@ -298,19 +356,19 @@ public class TimelineEventManager : MonoBehaviour
                 // Fallback to hardcoded example events
                 List<string> typeNames = new List<string>(markerTypeLookup.Keys);
                 
-                // Create markers with different positioning:
-                // - Kitchen: close, at 0 degrees (top)
-                // - MIT: medium distance, at 90 degrees (right side)  
-                // - Stanford: far, at 180 degrees (bottom)
+                // Create markers with different positioning and associated splats:
+                // - Kitchen: close, at 0 degrees (top), splat 0
+                // - MIT: medium distance, at 90 degrees (right side), splat 1
+                // - Stanford: far, at 180 degrees (bottom), splat 2
                 
                 if (typeNames.Count >= 1)
-                    AddEvent(centerTime.AddHours(-6), typeNames[0], "Kitchen", distance: 0.3f, angle: 0f);
+                    AddEvent(centerTime.AddHours(-6), typeNames[0], "Kitchen", distance: 0.3f, angle: 0f, splatIndex: 0);
 
                 if (typeNames.Count >= 2)
-                    AddEvent(centerTime.AddDays(-5), typeNames[1], "MIT", distance: 0.5f, angle: 90f);
+                    AddEvent(centerTime.AddDays(-5), typeNames[1], "MIT", distance: 0.5f, angle: 90f, splatIndex: 1);
                 
                 if (typeNames.Count >= 3)
-                    AddEvent(centerTime.AddMinutes(-15), typeNames[2], "Stanford", distance: 0.7f, angle: 180f);
+                    AddEvent(centerTime.AddMinutes(-15), typeNames[2], "Stanford", distance: 0.7f, angle: 180f, splatIndex: 2);
 
                 Debug.Log($"[TimelineEventManager] Created {activeMarkers.Count} example events around {centerTime:yyyy-MM-dd HH:mm:ss}");
             }

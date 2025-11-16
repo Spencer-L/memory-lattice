@@ -15,8 +15,20 @@ public class MemoryManager : MonoBehaviour
     
     private void Start()
     {
+        Debug.Log($"[MARKER→SPLAT] ===== INITIALIZATION =====");
+        Debug.Log($"[MARKER→SPLAT] Total splats configured: {splatObjects?.Count ?? 0}");
+        
+        if (splatObjects != null && splatObjects.Count > 0)
+        {
+            for (int i = 0; i < splatObjects.Count; i++)
+            {
+                Debug.Log($"[MARKER→SPLAT]   Splat[{i}]: {splatObjects[i]?.name ?? "NULL"}");
+            }
+        }
+        
         // Initialize all splats as closed
         InitializeSplats();
+        Debug.Log($"[MARKER→SPLAT] Initialization complete");
     }
     
     /// <summary>
@@ -45,13 +57,27 @@ public class MemoryManager : MonoBehaviour
     /// <param name="closeCurrentFirst">If true, closes the currently active splat before opening</param>
     public void OpenSplat(int index, bool closeCurrentFirst = true)
     {
-        if (index < 0 || index >= splatObjects.Count)
+        Debug.Log($"[MARKER→SPLAT] ===== OpenSplat(index={index}) CALLED =====");
+        Debug.Log($"[MARKER→SPLAT]   Total splats in list: {splatObjects?.Count ?? 0}");
+        Debug.Log($"[MARKER→SPLAT]   closeCurrentFirst: {closeCurrentFirst}");
+        Debug.Log($"[MARKER→SPLAT]   Currently active splat: {currentlyActiveSplat?.name ?? "NONE"}");
+        
+        if (splatObjects == null)
         {
-            Debug.LogWarning($"MemoryManager: Invalid splat index {index}");
+            Debug.LogError($"[MARKER→SPLAT] ⚠⚠⚠ splatObjects list is NULL!");
             return;
         }
         
-        OpenSplat(splatObjects[index], closeCurrentFirst);
+        if (index < 0 || index >= splatObjects.Count)
+        {
+            Debug.LogError($"[MARKER→SPLAT] ⚠⚠⚠ Invalid splat index {index}! Valid range: 0-{splatObjects.Count - 1}");
+            return;
+        }
+        
+        GameObject targetSplat = splatObjects[index];
+        Debug.Log($"[MARKER→SPLAT]   Target splat: {targetSplat?.name ?? "NULL"}");
+        
+        OpenSplat(targetSplat, closeCurrentFirst);
     }
     
     /// <summary>
@@ -61,32 +87,36 @@ public class MemoryManager : MonoBehaviour
     /// <param name="closeCurrentFirst">If true, closes the currently active splat before opening</param>
     public void OpenSplat(GameObject splat, bool closeCurrentFirst = true)
     {
+        Debug.Log($"[MARKER→SPLAT] OpenSplat(GameObject) called with splat: {splat?.name ?? "NULL"}");
+        
         if (splat == null)
         {
-            Debug.LogWarning("MemoryManager: Attempted to open null splat");
+            Debug.LogError("[MARKER→SPLAT] ⚠⚠⚠ Attempted to open null splat!");
             return;
         }
         
         if (!splatObjects.Contains(splat))
         {
-            Debug.LogWarning($"MemoryManager: Splat {splat.name} is not in the managed list");
+            Debug.LogError($"[MARKER→SPLAT] ⚠⚠⚠ Splat '{splat.name}' is not in the managed list!");
             return;
         }
         
         // If this splat is already active, do nothing
         if (currentlyActiveSplat == splat)
         {
-            Debug.Log($"MemoryManager: Splat {splat.name} is already open");
+            Debug.Log($"[MARKER→SPLAT] Splat '{splat.name}' is already open - skipping");
             return;
         }
         
         // Close current splat if requested and exists
         if (closeCurrentFirst && currentlyActiveSplat != null)
         {
+            Debug.Log($"[MARKER→SPLAT] Starting transition: '{currentlyActiveSplat.name}' → '{splat.name}'");
             StartCoroutine(TransitionSplats(currentlyActiveSplat, splat));
         }
         else
         {
+            Debug.Log($"[MARKER→SPLAT] Opening splat immediately: '{splat.name}'");
             OpenSplatImmediate(splat);
         }
     }
@@ -96,22 +126,34 @@ public class MemoryManager : MonoBehaviour
     /// </summary>
     private void OpenSplatImmediate(GameObject splat)
     {
-        if (splat == null) return;
+        Debug.Log($"[MARKER→SPLAT] → OpenSplatImmediate('{splat?.name ?? "NULL"}')");
         
+        if (splat == null)
+        {
+            Debug.LogError("[MARKER→SPLAT] ⚠⚠⚠ OpenSplatImmediate called with null splat!");
+            return;
+        }
+        
+        Debug.Log($"[MARKER→SPLAT]   Setting splat active...");
         splat.SetActive(true);
+        Debug.Log($"[MARKER→SPLAT]   Splat is now active: {splat.activeSelf}");
+        
         Animator animator = splat.GetComponent<Animator>();
+        Debug.Log($"[MARKER→SPLAT]   Animator component: {(animator != null ? "FOUND" : "NOT FOUND")}");
         
         if (animator != null)
         {
+            Debug.Log($"[MARKER→SPLAT]   Setting animator parameter '{ANIMATOR_PARAM_IS_CLOSED}' = false");
             animator.SetBool(ANIMATOR_PARAM_IS_CLOSED, false);
-            Debug.Log($"MemoryManager: Opened splat {splat.name}");
+            Debug.Log($"[MARKER→SPLAT]   ✓ Splat '{splat.name}' opened successfully");
         }
         else
         {
-            Debug.LogWarning($"MemoryManager: No Animator found on {splat.name}");
+            Debug.LogWarning($"[MARKER→SPLAT]   ⚠ No Animator found on '{splat.name}'");
         }
         
         currentlyActiveSplat = splat;
+        Debug.Log($"[MARKER→SPLAT]   currentlyActiveSplat set to: {currentlyActiveSplat.name}");
     }
     
     /// <summary>

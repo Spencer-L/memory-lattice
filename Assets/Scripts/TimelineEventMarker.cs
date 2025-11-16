@@ -118,20 +118,38 @@ public class TimelineEventMarker : MonoBehaviour
         
         if (isNear)
         {
+            // If already selected, don't process further (prevents looping)
+            if (IsSelected)
+            {
+                return;
+            }
+            
             // Increment selection timer
             selectionTimer += Time.deltaTime;
             
+            // Debug progress every 0.25 seconds
+            if (Mathf.FloorToInt(selectionTimer * 4) != Mathf.FloorToInt((selectionTimer - Time.deltaTime) * 4))
+            {
+                Debug.Log($"[MARKER→SPLAT] Selection progress: {EventLabel} - {SelectionProgress:P0} ({selectionTimer:F2}s / {selectionDuration:F2}s)");
+            }
+            
             // Check if selection is complete
-            if (selectionTimer >= selectionDuration && !IsSelected)
+            if (selectionTimer >= selectionDuration)
             {
                 IsSelected = true;
+                Debug.Log($"[MARKER→SPLAT] ===== SELECTION COMPLETE ===== Marker: {EventLabel} at {EventTime:yyyy-MM-dd HH:mm:ss}");
+                Debug.Log($"[MARKER→SPLAT] Invoking onMarkerSelected event. Listener count: {onMarkerSelected.GetPersistentEventCount()}");
                 onMarkerSelected.Invoke(this);
-                Debug.Log($"[TimelineEventMarker] Marker selected: {EventLabel} at {EventTime:yyyy-MM-dd HH:mm:ss}");
+                Debug.Log($"[MARKER→SPLAT] onMarkerSelected.Invoke() completed");
             }
         }
         else
         {
             // Reset timer and selection state when out of proximity
+            if (selectionTimer > 0f)
+            {
+                Debug.Log($"[MARKER→SPLAT] Out of proximity, resetting: {EventLabel} (was at {SelectionProgress:P0})");
+            }
             selectionTimer = 0f;
             IsSelected = false;
         }
