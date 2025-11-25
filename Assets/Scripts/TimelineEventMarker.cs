@@ -41,7 +41,7 @@ public class TimelineEventMarker : MonoBehaviour
     public MarkerSelectedEvent onMarkerSelected = new MarkerSelectedEvent();
     
     [SerializeField, Tooltip("Duration in seconds to hold proximity before selection")]
-    private float selectionDuration = 1.0f;
+    private float selectionDuration = 0.1f;
     
     public DateTime EventTime { get; set; }
     public string EventLabel { get; set; }
@@ -59,6 +59,19 @@ public class TimelineEventMarker : MonoBehaviour
     private LineRenderer connectionLine; // Line connecting marker to timeline position
     private double currentZoomLevel = 300.0; // Cache current visible seconds for tangent calculation
     
+    // Dynamic scaling
+    private Vector3 initialScale = Vector3.one;
+    private bool scaleCaptured = false;
+    
+    void Awake()
+    {
+        if (!scaleCaptured)
+        {
+            initialScale = transform.localScale;
+            scaleCaptured = true;
+        }
+    }
+    
     /// <summary>
     /// Initialize the event marker with a specific time and label
     /// </summary>
@@ -68,6 +81,12 @@ public class TimelineEventMarker : MonoBehaviour
         EventTime = eventTime;
         EventLabel = label;
         MarkerType = markerType;
+        
+        if (!scaleCaptured)
+        {
+            initialScale = transform.localScale;
+            scaleCaptured = true;
+        }
         
         // Randomize position if enabled
         if (randomizePosition)
@@ -191,12 +210,33 @@ public class TimelineEventMarker : MonoBehaviour
             
             if (timelinePosition != Vector3.zero)
             {
+                // Calculate dynamic scaling/offset based on proximity to center
+                Vector3 centerPos = timeline.GetWorldPositionForTime(timeline.GetCenterTimestamp());
+                float distToCenter = Vector3.Distance(timelinePosition, centerPos);
+                
+                float proximityRange = eventManager != null ? eventManager.GetProximityRange() : 1.5f;
+                float maxAddScale = eventManager != null ? eventManager.GetMaxAdditionalScale() : 1.0f;
+                float maxAddDist = eventManager != null ? eventManager.GetMaxAdditionalDistance() : 0.5f;
+                
+                float proximityFactor = 0f;
+                if (distToCenter < proximityRange)
+                {
+                    proximityFactor = 1f - (distToCenter / proximityRange);
+                }
+                
+                // Apply dynamic scale
+                float currentScaleMult = 1f + (proximityFactor * maxAddScale);
+                transform.localScale = initialScale * currentScaleMult;
+                
+                // Apply dynamic distance
+                float currentDist = distanceFromTimeline + (proximityFactor * maxAddDist);
+                
                 // Calculate tangent at this point (like BallsManager does)
                 Vector3 tangent = CalculateTangentAtTime(EventTime);
                 
                 // Calculate cylindrical offset using distance and angle
                 // This ensures the offset is perpendicular to the arc, creating proper radial positioning
-                Vector3 offset = CalculateCylindricalOffset(tangent, distanceFromTimeline, angleInDegrees);
+                Vector3 offset = CalculateCylindricalOffset(tangent, currentDist, angleInDegrees);
                 
                 Vector3 markerPosition = timelinePosition + offset;
                 transform.position = markerPosition;
@@ -216,10 +256,13 @@ public class TimelineEventMarker : MonoBehaviour
                     // Get current endpoint offset (queries manager dynamically)
                     float currentEndpointOffset = GetCurrentLineEndpointOffset();
                     
+                    // Scale the sphere radius offset with the object's scale
+                    float currentSphereRadius = sphereRadius * currentScaleMult;
+                    
                     // Calculate offsets: 
                     // - Start (marker end): offset by sphere radius + endpoint offset
                     // - End (timeline end): offset by just endpoint offset
-                    float markerEndOffset = sphereRadius + currentEndpointOffset;
+                    float markerEndOffset = currentSphereRadius + currentEndpointOffset;
                     float timelineEndOffset = currentEndpointOffset;
                     
                     // Only apply offsets if line is long enough
@@ -429,5 +472,12 @@ public class TimelineEventMarker : MonoBehaviour
     /// Get current angle in degrees
     /// </summary>
     public float GetAngle() => angleInDegrees;
-}
 
+    /// <summary>
+    /// Set the duration required for selection
+    /// </summary>
+    public void SetSelectionDuration(float duration)
+    {
+        selectionDuration = Mathf.Max(0.1f, duration);
+    }
+}

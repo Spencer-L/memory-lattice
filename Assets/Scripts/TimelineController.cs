@@ -42,14 +42,17 @@ public class TimelineController : MonoBehaviour
     private TimelineEventManager eventManager;
     
     [Header("Selection Configuration")]
-    [SerializeField, Tooltip("Time proximity threshold in seconds for marker selection")]
-    private float proximityThresholdSeconds = 30f;
+    [SerializeField, Tooltip("Angular proximity threshold in degrees for marker selection (zoom-independent)")]
+    private float proximityThresholdDegrees = 10f;
     
     [SerializeField, Tooltip("Radius of the selection fill indicator")]
     private float selectionFillRadius = 0.05f;
     
     [SerializeField, Tooltip("Color of the selection fill indicator")]
     private Color selectionFillColor = new Color(0f, 1f, 1f, 0.8f);
+    
+    [SerializeField, Tooltip("Duration in seconds for the selection indicator to fill completely")]
+    private float selectionFillDuration = 5f;
     
     [Header("Tick Configuration")]
     [SerializeField, Tooltip("Prefab for timeline ticks (should use GPU instancing material)")]
@@ -124,6 +127,7 @@ public class TimelineController : MonoBehaviour
     // Selection tracking
     private TimelineEventMarker markerInProximity = null;
     public TimelineEventMarker MarkerInProximity => markerInProximity;
+    private float selectionFillProgress = 0f; // Current fill progress (0-1)
     
     // For future event markers
     public delegate void OnTimelineUpdated(DateTime visibleStart, DateTime visibleEnd, double zoomLevel);
@@ -328,6 +332,11 @@ public class TimelineController : MonoBehaviour
         // Reset previous marker in proximity
         markerInProximity = null;
         
+        // Calculate dynamic time threshold based on current zoom level
+        // Formula: thresholdSeconds = proximityThresholdDegrees * currentVisibleSeconds / arcDegrees
+        // This ensures the angular threshold remains constant regardless of zoom
+        float proximityThresholdSeconds = (float)(proximityThresholdDegrees * currentVisibleSeconds / arcDegrees);
+        
         // Check each marker for proximity
         foreach (TimelineEventMarker marker in activeMarkers)
         {
@@ -442,15 +451,21 @@ public class TimelineController : MonoBehaviour
         if (selectionIndicator == null)
             return;
         
-        // Get selection progress from marker in proximity
-        float progress = 0f;
+        // Update selection fill progress based on proximity
         if (markerInProximity != null)
         {
-            progress = markerInProximity.SelectionProgress;
+            // Marker in range - fill clockwise over selectionFillDuration
+            selectionFillProgress += Time.deltaTime / selectionFillDuration;
+            selectionFillProgress = Mathf.Clamp01(selectionFillProgress);
+        }
+        else
+        {
+            // No marker in range - reset fill progress
+            selectionFillProgress = 0f;
         }
         
         // Update fill amount
-        selectionIndicator.SetFillAmount(progress);
+        selectionIndicator.SetFillAmount(selectionFillProgress);
         
         // Position indicator at the center of the timeline (between upper and lower reticles)
         Vector3 centerPosition = CalculateArcPosition(0.5f);

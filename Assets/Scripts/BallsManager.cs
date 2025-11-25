@@ -33,6 +33,16 @@ public class BallsManager : MonoBehaviour
     [SerializeField, Tooltip("Dynamic multiplier for all ball sizes")]
     private float dynamicScaleFactor = 1.0f;
     
+    [Header("Proximity Animation")]
+    [SerializeField, Tooltip("Range in meters from the center reticle where scaling/offset effects begin")]
+    private float proximityRange = 1.5f;
+
+    [SerializeField, Tooltip("Maximum additional scale multiplier (1.0 = +100% = 2x total size)")]
+    private float maxAdditionalScale = 1.0f; 
+
+    [SerializeField, Tooltip("Maximum additional radial distance from timeline")]
+    private float maxAdditionalDistance = 0.5f;
+    
     [Header("Density Culling")]
     [SerializeField, Tooltip("Base density threshold at reference zoom level (balls per square meter)")]
     private float baseDensityThreshold = 50f;
@@ -214,6 +224,9 @@ public class BallsManager : MonoBehaviour
     {
         float currentThickness = GetBallLineThickness();
         
+        // We also need to get proximity data to correctly calculate scale/radius
+        Vector3 centerPos = timelineController.GetWorldPositionForTime(timelineController.GetCenterTimestamp());
+        
         foreach (var ball in visibleBalls)
         {
             if (ball.lineRenderer != null && ball.isActive && ball.instance != null)
@@ -222,11 +235,17 @@ public class BallsManager : MonoBehaviour
                 ball.lineRenderer.startWidth = currentThickness;
                 ball.lineRenderer.endWidth = currentThickness;
                 
-                // Recalculate line positions with new offset
+                // Recalculate line positions with new offset and current scale
                 Vector3 ballPosition = ball.instance.transform.position;
+                
+                // Re-calculate proximity-based scale for accurate radius
+                // Note: ballPosition is already modified by proximity in PositionBall, so we use it directly.
+                // However, we need to know the scale to get the radius.
+                // Since we don't store the final scale in BallData, we can get it from the instance transform
+                float currentInstanceScale = ball.instance.transform.localScale.x; // Assuming uniform scale
+                
                 Vector3 arcPosition = timelineController.GetWorldPositionForTime(ball.timestamp);
-                float finalScale = ball.sizeParameter * dynamicScaleFactor * baseBallScale;
-                float actualBallRadius = finalScale * ballPrefabBaseRadius;
+                float actualBallRadius = currentInstanceScale * ballPrefabBaseRadius;
                 
                 PositionLineRenderer(ball.lineRenderer, ballPosition, arcPosition, actualBallRadius);
             }
@@ -768,6 +787,19 @@ public class BallsManager : MonoBehaviour
         // Get world position for this timestamp on the timeline arc
         Vector3 arcPosition = timelineController.GetWorldPositionForTime(ball.timestamp);
         
+        // Calculate proximity to center for dynamic scaling/offset
+        Vector3 centerPos = timelineController.GetWorldPositionForTime(timelineController.GetCenterTimestamp());
+        float distToCenter = Vector3.Distance(arcPosition, centerPos);
+        
+        float proximityFactor = 0f;
+        if (distToCenter < proximityRange)
+        {
+            proximityFactor = 1f - (distToCenter / proximityRange);
+        }
+        
+        // Calculate dynamic distance with proximity effect
+        float dynamicDistance = ball.distanceFromTimeline + (proximityFactor * maxAdditionalDistance);
+        
         // Calculate tangent at this point
         Vector3 tangent = CalculateTangentAtTime(ball.timestamp);
         
@@ -778,14 +810,17 @@ public class BallsManager : MonoBehaviour
         }
         
         // Calculate cylindrical position offset
-        Vector3 offset = CalculateCylindricalOffset(tangent, ball.distanceFromTimeline, ball.angleInDegrees);
+        Vector3 offset = CalculateCylindricalOffset(tangent, dynamicDistance, ball.angleInDegrees);
         
         // Final world position
         Vector3 finalPosition = arcPosition + offset;
         ball.instance.transform.position = finalPosition;
         
-        // Calculate scale
-        float finalScale = ball.sizeParameter * dynamicScaleFactor * baseBallScale;
+        // Calculate dynamic scale with proximity effect
+        float baseScale = ball.sizeParameter * dynamicScaleFactor * baseBallScale;
+        float scaleMult = 1f + (proximityFactor * maxAdditionalScale);
+        float finalScale = baseScale * scaleMult;
+        
         ball.instance.transform.localScale = Vector3.one * finalScale;
         
         // Position the line renderer connecting ball to timeline
@@ -911,8 +946,8 @@ public class BallsManager : MonoBehaviour
         {
             if (ball.instance != null && ball.isActive)
             {
-                float finalScale = ball.sizeParameter * dynamicScaleFactor * baseBallScale;
-                ball.instance.transform.localScale = Vector3.one * finalScale;
+                // Note: This needs to re-run PositionBall to account for proximity-based scaling
+                PositionBall(ball);
             }
         }
         
@@ -942,4 +977,3 @@ public class BallsManager : MonoBehaviour
         }
     }
 }
-

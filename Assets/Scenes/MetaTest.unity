@@ -392,6 +392,7 @@ GameObject:
   - component: {fileID: 345928718}
   - component: {fileID: 345928717}
   - component: {fileID: 345928719}
+  - component: {fileID: 345928721}
   - component: {fileID: 345928720}
   m_Layer: 0
   m_Name: Timeline
@@ -422,9 +423,10 @@ MonoBehaviour:
   scrollSensitivity: 3
   pinchManager: {fileID: 394292990}
   eventManager: {fileID: 345928720}
-  proximityThresholdSeconds: 1000
+  proximityThresholdDegrees: 5
   selectionFillRadius: 0.05
-  selectionFillColor: {r: 0, g: 1, b: 1, a: 0.8}
+  selectionFillColor: {r: 1, g: 1, b: 1, a: 0.8}
+  selectionFillDuration: 2.2
   tickPrefab: {fileID: 9204507737298005678, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
   targetTickCount: 1000
   instancedMaterial: {fileID: 2100000, guid: e2f3dfe883e085a4f95a857cc8c91f6a, type: 2}
@@ -518,6 +520,29 @@ MonoBehaviour:
     randomizePosition: 0
     splatIndex: 2
   createExampleEvents: 1
+  eventMarkerLineThickness: 0.002
+  lineEndpointOffset: 0.01
+--- !u!114 &345928721
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 345928716}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: a47ee96a69e070949914efc5cc354c69, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::TimelineEventMarker
+  distanceFromTimeline: 0.3
+  angleInDegrees: 0
+  lineWidth: 0.002
+  lineEndpointOffset: 0.02
+  lineColor: {r: 1, g: 1, b: 1, a: 1}
+  onMarkerSelected:
+    m_PersistentCalls:
+      m_Calls: []
+  selectionDuration: 0.1
 --- !u!1 &357221060
 GameObject:
   m_ObjectHideFlags: 0
@@ -2197,6 +2222,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BallsManager
   timelineController: {fileID: 345928717}
+  timelineEventManager: {fileID: 0}
   ballPrefab: {fileID: 1432920945576284506, guid: 6ec5b03ce2db1464f9ee3d219bd2e014, type: 3}
   totalBallCount: 3000
   minDistanceFromTimeline: 0.05
@@ -2217,6 +2243,11 @@ MonoBehaviour:
   - {r: 1, g: 0.8352941, b: 0, a: 1}
   - {r: 1, g: 0.41568628, b: 0, a: 1}
   initialPoolSize: 100
+  enableBallLineRenderers: 1
+  lineThicknessFactor: 0.5
+  fallbackLineThickness: 0.001
+  lineEndpointOffset: 0.008
+  ballLineColor: {r: 1, g: 1, b: 1, a: 0.28235295}
   enableDebugLogs: 1
 --- !u!1 &1725108602
 GameObject:

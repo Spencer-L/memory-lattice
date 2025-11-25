@@ -63,6 +63,16 @@ public class TimelineEventManager : MonoBehaviour
     [SerializeField, Tooltip("Create example events on Start for testing (uses eventConfigurations if not empty)")]
     private bool createExampleEvents = true;
     
+    [Header("Proximity Animation")]
+    [SerializeField, Tooltip("Range in meters from the center reticle where scaling/offset effects begin")]
+    private float proximityRange = 1.5f;
+
+    [SerializeField, Tooltip("Maximum additional scale multiplier (1.0 = +100% = 2x total size)")]
+    private float maxAdditionalScale = 1.0f; // Results in 2x size
+
+    [SerializeField, Tooltip("Maximum additional radial distance from timeline")]
+    private float maxAdditionalDistance = 0.5f;
+    
     [Header("Line Renderer Settings")]
     [SerializeField, Tooltip("Thickness of the line connecting event markers to the timeline")]
     private float eventMarkerLineThickness = 0.002f;
@@ -325,6 +335,11 @@ public class TimelineEventManager : MonoBehaviour
     /// </summary>
     public float GetLineEndpointOffset() => lineEndpointOffset;
     
+    // Proximity settings getters
+    public float GetProximityRange() => proximityRange;
+    public float GetMaxAdditionalScale() => maxAdditionalScale;
+    public float GetMaxAdditionalDistance() => maxAdditionalDistance;
+
     /// <summary>
     /// Creates events from configuration or uses example events for testing
     /// </summary>
@@ -404,4 +419,3 @@ public class TimelineEventManager : MonoBehaviour
         ClearAllEvents();
     }
 }
-
