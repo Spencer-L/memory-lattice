@@ -9,6 +9,9 @@ public class BallsManager : MonoBehaviour
     [SerializeField, Tooltip("Reference to the TimelineController")]
     private TimelineController timelineController;
     
+    [SerializeField, Tooltip("Reference to TimelineEventManager (for line settings)")]
+    private TimelineEventManager timelineEventManager;
+    
     [Header("Ball Configuration")]
     [SerializeField, Tooltip("Prefab for ball instances")]
     private GameObject ballPrefab;
@@ -65,6 +68,23 @@ public class BallsManager : MonoBehaviour
     [SerializeField, Tooltip("Initial pool size for ball instances")]
     private int initialPoolSize = 100;
     
+    [Header("Line Renderer Settings")]
+    [SerializeField, Tooltip("Enable line renderers connecting balls to timeline")]
+    private bool enableBallLineRenderers = true;
+    
+    [SerializeField, Tooltip("Line thickness factor relative to event marker lines (0.5 = half thickness)")]
+    [Range(0.1f, 1.0f)]
+    private float lineThicknessFactor = 0.5f;
+    
+    [SerializeField, Tooltip("Fallback line thickness if TimelineEventManager not assigned")]
+    private float fallbackLineThickness = 0.001f;
+    
+    [SerializeField, Tooltip("Line endpoint offset (same as event markers)")]
+    private float lineEndpointOffset = 0.02f;
+    
+    [SerializeField, Tooltip("Color of the ball connection lines")]
+    private Color ballLineColor = new Color(1f, 1f, 1f, 0.5f);
+    
     [Header("Debug")]
     [SerializeField, Tooltip("Enable debug logging")]
     private bool enableDebugLogs = true;
@@ -79,6 +99,7 @@ public class BallsManager : MonoBehaviour
         public Color color;
         public float sizeParameter; // 0-1
         public GameObject instance;
+        public LineRenderer lineRenderer;
         public bool isActive;
     }
     
@@ -93,6 +114,18 @@ public class BallsManager : MonoBehaviour
     // Object pooling
     private Queue<GameObject> ballPool;
     private List<GameObject> activeBalls;
+    
+    // Line renderer pooling
+    private Queue<LineRenderer> lineRendererPool;
+    private List<LineRenderer> activeLineRenderers;
+    private Material lineMaterial;
+    
+    // Cached ball prefab base radius (calculated from prefab bounds at unit scale)
+    private float ballPrefabBaseRadius = 0.5f;
+    
+    // Cached line settings to detect changes at runtime
+    private float cachedLineEndpointOffset;
+    private float cachedLineThickness;
     
     // Material property block for efficient color changes without material instances
     private MaterialPropertyBlock propertyBlock;
@@ -123,6 +156,9 @@ public class BallsManager : MonoBehaviour
         
         DebugLog("Initializing BallsManager...");
         
+        // Calculate the ball prefab's base radius from its renderer bounds
+        CalculateBallPrefabBaseRadius();
+        
         // Initialize random generator with fixed seed
         randomGenerator = new System.Random(randomSeed);
         
@@ -142,7 +178,61 @@ public class BallsManager : MonoBehaviour
         // Subscribe to timeline events
         timelineController.TimelineUpdated += OnTimelineUpdated;
         
+        // Initialize cached line settings
+        cachedLineEndpointOffset = GetLineEndpointOffset();
+        cachedLineThickness = GetBallLineThickness();
+        
         DebugLog($"BallsManager initialized with {totalBallCount} balls");
+    }
+    
+    void Update()
+    {
+        // Check if line settings have changed in the inspector
+        if (!enableBallLineRenderers) return;
+        
+        float currentOffset = GetLineEndpointOffset();
+        float currentThickness = GetBallLineThickness();
+        
+        bool settingsChanged = !Mathf.Approximately(currentOffset, cachedLineEndpointOffset) ||
+                               !Mathf.Approximately(currentThickness, cachedLineThickness);
+        
+        if (settingsChanged)
+        {
+            cachedLineEndpointOffset = currentOffset;
+            cachedLineThickness = currentThickness;
+            
+            // Update all visible ball line renderers
+            UpdateAllLineRenderers();
+        }
+    }
+    
+    /// <summary>
+    /// Updates all visible ball line renderers with current settings.
+    /// Called when line settings change at runtime.
+    /// </summary>
+    private void UpdateAllLineRenderers()
+    {
+        float currentThickness = GetBallLineThickness();
+        
+        foreach (var ball in visibleBalls)
+        {
+            if (ball.lineRenderer != null && ball.isActive && ball.instance != null)
+            {
+                // Update line thickness
+                ball.lineRenderer.startWidth = currentThickness;
+                ball.lineRenderer.endWidth = currentThickness;
+                
+                // Recalculate line positions with new offset
+                Vector3 ballPosition = ball.instance.transform.position;
+                Vector3 arcPosition = timelineController.GetWorldPositionForTime(ball.timestamp);
+                float finalScale = ball.sizeParameter * dynamicScaleFactor * baseBallScale;
+                float actualBallRadius = finalScale * ballPrefabBaseRadius;
+                
+                PositionLineRenderer(ball.lineRenderer, ballPosition, arcPosition, actualBallRadius);
+            }
+        }
+        
+        DebugLog($"Updated {visibleBalls.Count} ball line renderers (offset: {cachedLineEndpointOffset:F3}, thickness: {cachedLineThickness:F4})");
     }
     
     void OnDestroy()
@@ -178,6 +268,90 @@ public class BallsManager : MonoBehaviour
                 }
             }
         }
+        
+        // Clean up active line renderers
+        if (activeLineRenderers != null)
+        {
+            foreach (var lr in activeLineRenderers)
+            {
+                if (lr != null)
+                {
+                    Destroy(lr.gameObject);
+                }
+            }
+            activeLineRenderers.Clear();
+        }
+        
+        // Clean up pooled line renderers
+        if (lineRendererPool != null)
+        {
+            while (lineRendererPool.Count > 0)
+            {
+                LineRenderer lr = lineRendererPool.Dequeue();
+                if (lr != null)
+                {
+                    Destroy(lr.gameObject);
+                }
+            }
+        }
+        
+        // Clean up line material
+        if (lineMaterial != null)
+        {
+            Destroy(lineMaterial);
+        }
+    }
+    
+    /// <summary>
+    /// Calculate the base radius of the ball prefab from its renderer bounds.
+    /// This is the radius at unit scale (scale = 1).
+    /// </summary>
+    private void CalculateBallPrefabBaseRadius()
+    {
+        if (ballPrefab == null)
+        {
+            Debug.LogWarning("[BallsManager] Ball prefab is null, using default radius 0.5");
+            ballPrefabBaseRadius = 0.5f;
+            return;
+        }
+        
+        // Try to get renderer from the prefab
+        Renderer renderer = ballPrefab.GetComponentInChildren<Renderer>();
+        if (renderer != null)
+        {
+            // For a prefab, we need to temporarily instantiate it to get accurate bounds
+            // OR we can use the shared mesh bounds if it's a MeshRenderer
+            MeshFilter meshFilter = ballPrefab.GetComponentInChildren<MeshFilter>();
+            if (meshFilter != null && meshFilter.sharedMesh != null)
+            {
+                // Use mesh bounds (local space, unaffected by transform)
+                Vector3 meshExtents = meshFilter.sharedMesh.bounds.extents;
+                // Account for the prefab's local scale
+                Vector3 prefabScale = ballPrefab.transform.localScale;
+                float scaledRadius = Mathf.Max(
+                    meshExtents.x * prefabScale.x,
+                    Mathf.Max(meshExtents.y * prefabScale.y, meshExtents.z * prefabScale.z)
+                );
+                ballPrefabBaseRadius = scaledRadius;
+                DebugLog($"Ball prefab base radius calculated from mesh: {ballPrefabBaseRadius:F4}");
+                return;
+            }
+        }
+        
+        // Try SphereCollider as fallback
+        SphereCollider sphereCollider = ballPrefab.GetComponentInChildren<SphereCollider>();
+        if (sphereCollider != null)
+        {
+            Vector3 prefabScale = ballPrefab.transform.localScale;
+            float maxScale = Mathf.Max(prefabScale.x, Mathf.Max(prefabScale.y, prefabScale.z));
+            ballPrefabBaseRadius = sphereCollider.radius * maxScale;
+            DebugLog($"Ball prefab base radius calculated from SphereCollider: {ballPrefabBaseRadius:F4}");
+            return;
+        }
+        
+        // Last resort: use default
+        Debug.LogWarning("[BallsManager] Could not determine ball prefab radius, using default 0.5");
+        ballPrefabBaseRadius = 0.5f;
     }
     
     private void InitializeBallPool()
@@ -200,6 +374,71 @@ public class BallsManager : MonoBehaviour
         {
             Debug.LogWarning("[BallsManager] Ball prefab not assigned - pool will be created on demand");
         }
+        
+        // Initialize line renderer pool
+        if (enableBallLineRenderers)
+        {
+            InitializeLineRendererPool();
+        }
+    }
+    
+    private void InitializeLineRendererPool()
+    {
+        lineRendererPool = new Queue<LineRenderer>();
+        activeLineRenderers = new List<LineRenderer>();
+        
+        // Create a shared material for line renderers
+        lineMaterial = new Material(Shader.Find("Sprites/Default"));
+        lineMaterial.color = ballLineColor;
+        
+        // Pre-populate the line renderer pool
+        for (int i = 0; i < initialPoolSize; i++)
+        {
+            LineRenderer lr = CreateLineRendererInstance();
+            lr.gameObject.SetActive(false);
+            lineRendererPool.Enqueue(lr);
+        }
+        
+        DebugLog($"Line renderer pool initialized with {initialPoolSize} instances");
+    }
+    
+    private LineRenderer CreateLineRendererInstance()
+    {
+        GameObject lineObj = new GameObject("BallLine");
+        lineObj.transform.SetParent(transform);
+        
+        LineRenderer lr = lineObj.AddComponent<LineRenderer>();
+        lr.positionCount = 2;
+        lr.material = lineMaterial;
+        lr.startColor = ballLineColor;
+        lr.endColor = ballLineColor;
+        lr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        lr.receiveShadows = false;
+        
+        // Set line width based on event marker settings
+        float lineWidth = GetBallLineThickness();
+        lr.startWidth = lineWidth;
+        lr.endWidth = lineWidth;
+        
+        return lr;
+    }
+    
+    private float GetBallLineThickness()
+    {
+        if (timelineEventManager != null)
+        {
+            return timelineEventManager.GetEventMarkerLineThickness() * lineThicknessFactor;
+        }
+        return fallbackLineThickness;
+    }
+    
+    private float GetLineEndpointOffset()
+    {
+        if (timelineEventManager != null)
+        {
+            return timelineEventManager.GetLineEndpointOffset();
+        }
+        return lineEndpointOffset;
     }
     
     private void GenerateBallParameters()
@@ -302,6 +541,36 @@ public class BallsManager : MonoBehaviour
         ballPool.Enqueue(ball);
     }
     
+    private LineRenderer GetLineRendererFromPool()
+    {
+        if (!enableBallLineRenderers) return null;
+        
+        LineRenderer lr;
+        
+        if (lineRendererPool != null && lineRendererPool.Count > 0)
+        {
+            lr = lineRendererPool.Dequeue();
+        }
+        else
+        {
+            // Pool exhausted, create new instance
+            lr = CreateLineRendererInstance();
+        }
+        
+        lr.gameObject.SetActive(true);
+        activeLineRenderers.Add(lr);
+        return lr;
+    }
+    
+    private void ReturnLineRendererToPool(LineRenderer lr)
+    {
+        if (lr == null) return;
+        
+        lr.gameObject.SetActive(false);
+        activeLineRenderers.Remove(lr);
+        lineRendererPool.Enqueue(lr);
+    }
+    
     private void ReturnAllBallsToPool()
     {
         // Return all active balls to pool
@@ -316,10 +585,26 @@ public class BallsManager : MonoBehaviour
         }
         activeBalls.Clear();
         
+        // Return all active line renderers to pool
+        if (enableBallLineRenderers && activeLineRenderers != null)
+        {
+            for (int i = activeLineRenderers.Count - 1; i >= 0; i--)
+            {
+                LineRenderer lr = activeLineRenderers[i];
+                if (lr != null)
+                {
+                    lr.gameObject.SetActive(false);
+                    lineRendererPool.Enqueue(lr);
+                }
+            }
+            activeLineRenderers.Clear();
+        }
+        
         // Clear instance references in ball data
         foreach (var ballData in allBalls)
         {
             ballData.instance = null;
+            ballData.lineRenderer = null;
             ballData.isActive = false;
         }
     }
@@ -342,10 +627,16 @@ public class BallsManager : MonoBehaviour
                 // Get instance from pool
                 ball.instance = GetBallFromPool();
                 
+                // Get line renderer from pool if enabled
+                if (enableBallLineRenderers)
+                {
+                    ball.lineRenderer = GetLineRendererFromPool();
+                }
+                
                 // Configure ball instance
                 ConfigureBallInstance(ball);
                 
-                // Position and scale the ball
+                // Position and scale the ball (also positions line renderer)
                 PositionBall(ball);
                 
                 ball.isActive = true;
@@ -423,7 +714,7 @@ public class BallsManager : MonoBehaviour
             int targetBallCount = Mathf.FloorToInt(scaledDensityThreshold * unitArea);
             int ballsToCull = Mathf.Max(0, visibleBalls.Count - targetBallCount);
             
-            // Deactivate smallest balls
+            // Deactivate smallest balls and their line renderers
             for (int i = 0; i < ballsToCull && i < sortedBalls.Count; i++)
             {
                 var ball = sortedBalls[i];
@@ -431,6 +722,10 @@ public class BallsManager : MonoBehaviour
                 {
                     ball.instance.SetActive(false);
                     ball.isActive = false;
+                }
+                if (ball.lineRenderer != null)
+                {
+                    ball.lineRenderer.gameObject.SetActive(false);
                 }
             }
             
@@ -492,6 +787,44 @@ public class BallsManager : MonoBehaviour
         // Calculate scale
         float finalScale = ball.sizeParameter * dynamicScaleFactor * baseBallScale;
         ball.instance.transform.localScale = Vector3.one * finalScale;
+        
+        // Position the line renderer connecting ball to timeline
+        // Ball radius = scale factor * prefab's base radius
+        if (ball.lineRenderer != null)
+        {
+            float actualBallRadius = finalScale * ballPrefabBaseRadius;
+            PositionLineRenderer(ball.lineRenderer, finalPosition, arcPosition, actualBallRadius);
+        }
+    }
+    
+    private void PositionLineRenderer(LineRenderer lr, Vector3 ballPosition, Vector3 timelinePosition, float ballRadius)
+    {
+        Vector3 lineDirection = (timelinePosition - ballPosition).normalized;
+        float totalLineLength = Vector3.Distance(ballPosition, timelinePosition);
+        
+        // Get offset settings
+        float endpointOffset = GetLineEndpointOffset();
+        
+        // Calculate offsets:
+        // - Start (ball end): offset by ball radius + endpoint offset
+        // - End (timeline end): offset by just endpoint offset
+        float ballEndOffset = ballRadius + endpointOffset;
+        float timelineEndOffset = endpointOffset;
+        
+        // Only apply offsets if line is long enough
+        if (totalLineLength > ballEndOffset + timelineEndOffset + 0.01f)
+        {
+            Vector3 lineStart = ballPosition + lineDirection * ballEndOffset;
+            Vector3 lineEnd = timelinePosition - lineDirection * timelineEndOffset;
+            lr.SetPosition(0, lineStart);
+            lr.SetPosition(1, lineEnd);
+        }
+        else
+        {
+            // Line is too short, just connect the points directly
+            lr.SetPosition(0, ballPosition);
+            lr.SetPosition(1, timelinePosition);
+        }
     }
     
     private Vector3 CalculateTangentAtTime(DateTime time)
@@ -508,17 +841,34 @@ public class BallsManager : MonoBehaviour
         
         Vector3 posBefore = timelineController.GetWorldPositionForTime(timeBefore);
         Vector3 posAfter = timelineController.GetWorldPositionForTime(timeAfter);
+        Vector3 posCurrent = timelineController.GetWorldPositionForTime(time);
         
-        // Check if positions are valid (not zero)
-        if (posBefore == Vector3.zero || posAfter == Vector3.zero)
+        // Handle edge cases where one sample is outside visible range
+        // Use one-sided sampling to maintain correct tangent direction at edges
+        if (posBefore == Vector3.zero && posAfter != Vector3.zero && posCurrent != Vector3.zero)
         {
-            // Fallback: return a default tangent
-            return Vector3.right;
+            // At left edge of visible range: use current->after for tangent
+            Vector3 tangent = (posAfter - posCurrent).normalized;
+            if (tangent.sqrMagnitude > 0.001f)
+                return tangent;
+        }
+        else if (posAfter == Vector3.zero && posBefore != Vector3.zero && posCurrent != Vector3.zero)
+        {
+            // At right edge of visible range: use before->current for tangent
+            Vector3 tangent = (posCurrent - posBefore).normalized;
+            if (tangent.sqrMagnitude > 0.001f)
+                return tangent;
+        }
+        else if (posBefore != Vector3.zero && posAfter != Vector3.zero)
+        {
+            // Normal case: both samples valid, use full span
+            Vector3 tangent = (posAfter - posBefore).normalized;
+            if (tangent.sqrMagnitude > 0.001f)
+                return tangent;
         }
         
-        Vector3 tangent = (posAfter - posBefore).normalized;
-        
-        return tangent;
+        // Fallback: return a default tangent (should rarely happen now)
+        return Vector3.right;
     }
     
     private Vector3 CalculateCylindricalOffset(Vector3 tangent, float distance, float angleInDegrees)

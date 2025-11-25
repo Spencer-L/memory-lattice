@@ -63,6 +63,13 @@ public class TimelineEventManager : MonoBehaviour
     [SerializeField, Tooltip("Create example events on Start for testing (uses eventConfigurations if not empty)")]
     private bool createExampleEvents = true;
     
+    [Header("Line Renderer Settings")]
+    [SerializeField, Tooltip("Thickness of the line connecting event markers to the timeline")]
+    private float eventMarkerLineThickness = 0.002f;
+    
+    [SerializeField, Tooltip("Offset distance from both the timeline and sphere surface (shortens the line on both ends)")]
+    private float lineEndpointOffset = 0.02f;
+    
     private List<TimelineEventMarker> activeMarkers = new List<TimelineEventMarker>();
     private Dictionary<string, GameObject> markerTypeLookup;
     
@@ -163,6 +170,9 @@ public class TimelineEventManager : MonoBehaviour
         }
         
         marker.Initialize(timelineController, eventTime, label, markerTypeName);
+        
+        // Configure line renderer settings - pass reference to this manager for dynamic settings
+        marker.ConfigureLineSettings(this);
         
         // Set position if specified (otherwise uses randomization from marker)
         if (distance >= 0f && angle >= 0f)
@@ -304,6 +314,16 @@ public class TimelineEventManager : MonoBehaviour
     {
         return markerTypeLookup.ContainsKey(typeName);
     }
+    
+    /// <summary>
+    /// Get the line thickness setting for event markers
+    /// </summary>
+    public float GetEventMarkerLineThickness() => eventMarkerLineThickness;
+    
+    /// <summary>
+    /// Get the line endpoint offset setting
+    /// </summary>
+    public float GetLineEndpointOffset() => lineEndpointOffset;
     
     /// <summary>
     /// Creates events from configuration or uses example events for testing

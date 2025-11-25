@@ -220,7 +220,7 @@ MonoBehaviour:
   arcRadius: 0.96
   arcDegrees: 120
   arcOffset: {x: 0, y: 0, z: -0.2}
-  initialVisibleSeconds: 7200
+  initialVisibleSeconds: 72000
   minVisibleSeconds: 60
   zoomSensitivity: 1
   scrollSensitivity: 1
@@ -2126,6 +2126,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1717494914}
+  - component: {fileID: 1717494915}
   m_Layer: 0
   m_Name: BallsManager
   m_TagString: Untagged
@@ -2148,6 +2149,40 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!114 &1717494915
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1717494913}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: db472d7c8925da5499bfaf34e4b5f2f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: Assembly-CSharp::BallsManager
+  timelineController: {fileID: 0}
+  ballPrefab: {fileID: 0}
+  totalBallCount: 1000
+  minDistanceFromTimeline: 0.2
+  maxDistanceFromTimeline: 0.8
+  baseBallScale: 0.02
+  dynamicScaleFactor: 1
+  baseDensityThreshold: 50
+  referenceZoomSeconds: 300
+  densityScalingPower: 0.7
+  randomSeed: 42
+  timeBias: 2
+  colorPalette:
+  - {r: 0.8901961, g: 0.11764706, b: 0.14117648, a: 1}
+  - {r: 0.9254902, g: 0, b: 0.54901963, a: 1}
+  - {r: 0.36862746, g: 0.17254902, b: 0.5137255, a: 1}
+  - {r: 0, g: 0.31764707, b: 0.7294118, a: 1}
+  - {r: 0, g: 0.6509804, b: 0.3137255, a: 1}
+  - {r: 1, g: 0.8352941, b: 0, a: 1}
+  - {r: 1, g: 0.41568628, b: 0, a: 1}
+  initialPoolSize: 100
+  enableDebugLogs: 1
 --- !u!1 &1735784579
 GameObject:
   m_ObjectHideFlags: 0

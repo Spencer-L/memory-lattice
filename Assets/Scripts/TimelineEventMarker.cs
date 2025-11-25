@@ -27,8 +27,14 @@ public class TimelineEventMarker : MonoBehaviour
     [SerializeField, Tooltip("Width of the line connecting marker to timeline")]
     private float lineWidth = 0.002f;
     
+    [SerializeField, Tooltip("Offset distance from both ends of the line (shortens the line)")]
+    private float lineEndpointOffset = 0.02f;
+    
     [SerializeField, Tooltip("Color of the connection line")]
     private Color lineColor = Color.white;
+    
+    // Cached sphere radius (auto-detected from renderer bounds)
+    private float sphereRadius = 0.05f;
     
     [Header("Selection Settings")]
     [SerializeField, Tooltip("Event fired when marker is selected after lingering")]
@@ -49,6 +55,7 @@ public class TimelineEventMarker : MonoBehaviour
     private float selectionTimer = 0f;
     
     private TimelineController timeline;
+    private TimelineEventManager eventManager; // Reference to manager for dynamic settings
     private LineRenderer connectionLine; // Line connecting marker to timeline position
     private double currentZoomLevel = 300.0; // Cache current visible seconds for tangent calculation
     
@@ -195,10 +202,40 @@ public class TimelineEventMarker : MonoBehaviour
                 transform.position = markerPosition;
                 
                 // Update the connection line between marker and timeline position
+                // Apply offsets to shorten the line from both ends
                 if (connectionLine != null)
                 {
-                    connectionLine.SetPosition(0, markerPosition); // Start at marker
-                    connectionLine.SetPosition(1, timelinePosition); // End at timeline position
+                    // Update line width in case it changed in inspector
+                    float currentThickness = GetCurrentLineThickness();
+                    connectionLine.startWidth = currentThickness;
+                    connectionLine.endWidth = currentThickness;
+                    
+                    Vector3 lineDirection = (timelinePosition - markerPosition).normalized;
+                    float totalLineLength = Vector3.Distance(markerPosition, timelinePosition);
+                    
+                    // Get current endpoint offset (queries manager dynamically)
+                    float currentEndpointOffset = GetCurrentLineEndpointOffset();
+                    
+                    // Calculate offsets: 
+                    // - Start (marker end): offset by sphere radius + endpoint offset
+                    // - End (timeline end): offset by just endpoint offset
+                    float markerEndOffset = sphereRadius + currentEndpointOffset;
+                    float timelineEndOffset = currentEndpointOffset;
+                    
+                    // Only apply offsets if line is long enough
+                    if (totalLineLength > markerEndOffset + timelineEndOffset + 0.01f)
+                    {
+                        Vector3 lineStart = markerPosition + lineDirection * markerEndOffset;
+                        Vector3 lineEnd = timelinePosition - lineDirection * timelineEndOffset;
+                        connectionLine.SetPosition(0, lineStart);
+                        connectionLine.SetPosition(1, lineEnd);
+                    }
+                    else
+                    {
+                        // Line is too short, just connect the points directly
+                        connectionLine.SetPosition(0, markerPosition);
+                        connectionLine.SetPosition(1, timelinePosition);
+                    }
                 }
             }
         }
@@ -258,6 +295,91 @@ public class TimelineEventMarker : MonoBehaviour
         Vector3 offset = radialDirection * distance;
         
         return offset;
+    }
+    
+    /// <summary>
+    /// Configure line renderer settings from the TimelineEventManager.
+    /// Stores a reference to the manager for dynamic querying of settings at runtime.
+    /// </summary>
+    /// <param name="manager">Reference to the TimelineEventManager for dynamic settings</param>
+    public void ConfigureLineSettings(TimelineEventManager manager)
+    {
+        eventManager = manager;
+        
+        // Auto-detect sphere radius from renderer bounds
+        sphereRadius = CalculateSphereRadiusFromBounds();
+        
+        // Update line renderer with current settings
+        UpdateLineRendererSettings();
+        UpdatePosition();
+    }
+    
+    /// <summary>
+    /// Updates the line renderer width from current manager settings
+    /// </summary>
+    private void UpdateLineRendererSettings()
+    {
+        if (connectionLine != null)
+        {
+            float currentThickness = GetCurrentLineThickness();
+            connectionLine.startWidth = currentThickness;
+            connectionLine.endWidth = currentThickness;
+        }
+    }
+    
+    /// <summary>
+    /// Get current line thickness from manager or use local fallback
+    /// </summary>
+    private float GetCurrentLineThickness()
+    {
+        if (eventManager != null)
+        {
+            return eventManager.GetEventMarkerLineThickness();
+        }
+        return lineWidth;
+    }
+    
+    /// <summary>
+    /// Get current line endpoint offset from manager or use local fallback
+    /// </summary>
+    private float GetCurrentLineEndpointOffset()
+    {
+        if (eventManager != null)
+        {
+            return eventManager.GetLineEndpointOffset();
+        }
+        return lineEndpointOffset;
+    }
+    
+    /// <summary>
+    /// Calculate the sphere radius from the renderer bounds of this object or its children.
+    /// Uses the maximum extent to handle non-uniform scaling.
+    /// </summary>
+    private float CalculateSphereRadiusFromBounds()
+    {
+        // Try to get renderer from this object or children
+        Renderer renderer = GetComponentInChildren<Renderer>();
+        if (renderer != null)
+        {
+            // Use the maximum extent of the bounds as the radius
+            // This works even with non-uniform scaling
+            Vector3 extents = renderer.bounds.extents;
+            float maxExtent = Mathf.Max(extents.x, Mathf.Max(extents.y, extents.z));
+            return maxExtent;
+        }
+        
+        // Fallback: try SphereCollider
+        SphereCollider sphereCollider = GetComponentInChildren<SphereCollider>();
+        if (sphereCollider != null)
+        {
+            // Account for the collider's scale
+            float maxScale = Mathf.Max(transform.lossyScale.x, Mathf.Max(transform.lossyScale.y, transform.lossyScale.z));
+            return sphereCollider.radius * maxScale;
+        }
+        
+        // Last resort fallback
+        Debug.LogWarning($"[TimelineEventMarker] Could not detect sphere radius for {gameObject.name}, using default 0.05");
+        return 0.05f;
     }
     
     /// <summary>

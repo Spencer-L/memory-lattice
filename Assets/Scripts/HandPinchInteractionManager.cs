@@ -47,6 +47,9 @@ public class HandPinchInteractionManager : MonoBehaviour
     // Debug tracking
     private float lastDebugLogTime = 0f;
     
+    // Inspector change detection
+    private float lastScrollValueForInspector = 0f;
+    
     void Start()
     {
         DebugLog("=== Hand Pinch Interaction Manager Started ===");
@@ -89,6 +92,9 @@ public class HandPinchInteractionManager : MonoBehaviour
         {
             DebugLog("✓ All references assigned correctly!");
         }
+        
+        // Initialize Inspector change tracker
+        lastScrollValueForInspector = scrollValue;
     }
     
     // Auto-find anchors if not assigned
@@ -125,6 +131,14 @@ public class HandPinchInteractionManager : MonoBehaviour
         ScrollDeltaThisFrame = 0f;
         ZoomDeltaThisFrame = 0f;
         IsTwoHandPinching = false;
+        
+        // Detect Inspector changes to scrollValue (modifications made externally between frames)
+        float inspectorScrollDelta = scrollValue - lastScrollValueForInspector;
+        if (!Mathf.Approximately(inspectorScrollDelta, 0f))
+        {
+            ScrollDeltaThisFrame = inspectorScrollDelta;
+            lastScrollValueForInspector = scrollValue;
+        }
         
         if (leftHand == null || rightHand == null || leftHandAnchor == null || rightHandAnchor == null)
         {
@@ -194,6 +208,9 @@ public class HandPinchInteractionManager : MonoBehaviour
         
         wasLeftPinching = leftPinching;
         wasRightPinching = rightPinching;
+        
+        // Sync tracker to capture any changes made during this frame
+        lastScrollValueForInspector = scrollValue;
     }
     
     private void LogHandTrackingStatus()
