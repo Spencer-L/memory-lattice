@@ -53,6 +53,16 @@ public class TimelineController : MonoBehaviour
     
     [SerializeField, Tooltip("Duration in seconds for the selection indicator to fill completely")]
     private float selectionFillDuration = 5f;
+
+    [Header("Static Reticle Configuration")]
+    [SerializeField] private float staticRingRadius = 0.05f;
+    [SerializeField] private float staticRingThickness = 0.002f;
+    [SerializeField] private Color staticRingColor = new Color(1f, 1f, 1f, 0.3f);
+    
+    [SerializeField] private float lineStartOffset = 0.03f;
+    [SerializeField] private float lineLength = 0.05f;
+    [SerializeField] private float lineWidth = 0.002f;
+    [SerializeField] private Color lineColor = new Color(1f, 1f, 1f, 0.5f);
     
     [Header("Tick Configuration")]
     [SerializeField, Tooltip("Prefab for timeline ticks (should use GPU instancing material)")]
@@ -90,6 +100,13 @@ public class TimelineController : MonoBehaviour
     [SerializeField, Tooltip("Scale multiplier for reticle height (makes them taller)")]
     private float reticleHeightMultiplier = 1.5f;
     
+    [Header("Reticle Time Display")]
+    [SerializeField, Tooltip("TextMeshPro prefab for reticle time display")]
+    private GameObject reticleTimeLabelPrefab;
+    
+    [SerializeField, Tooltip("Offset from center reticle")]
+    private Vector3 reticleTextOffset = new Vector3(0f, 0.08f, 0f);
+    
     [Header("Debug")]
     [SerializeField] private bool enableDebugLogs = true;
     
@@ -99,6 +116,9 @@ public class TimelineController : MonoBehaviour
     // Reticle objects
     private GameObject upperReticle;
     private GameObject lowerReticle;
+    private GameObject reticleLabelContainer;
+    private TMPro.TextMeshPro reticleTimeText;
+    private TMPro.TextMeshPro reticleDateText;
     
     // Selection indicator (single, centered)
     private SelectionRadialFill selectionIndicator;
@@ -277,6 +297,42 @@ public class TimelineController : MonoBehaviour
         selectionIndicator = indicatorObj.AddComponent<SelectionRadialFill>();
         selectionIndicator.SetRadius(selectionFillRadius);
         selectionIndicator.SetColor(selectionFillColor);
+        
+        // Configure additional visual elements
+        selectionIndicator.ConfigureStaticRing(staticRingRadius, staticRingThickness, staticRingColor);
+        selectionIndicator.ConfigureReticleLines(lineStartOffset, lineLength, lineWidth, lineColor);
+        
+        // Initialize Reticle Time Label
+        if (reticleTimeLabelPrefab != null)
+        {
+            reticleLabelContainer = Instantiate(reticleTimeLabelPrefab, selectionIndicator.transform);
+            reticleLabelContainer.transform.localPosition = reticleTextOffset;
+            reticleLabelContainer.transform.localRotation = Quaternion.identity;
+            
+            // Look for specific named children "Time" and "DayYear"
+            Transform timeObj = reticleLabelContainer.transform.Find("Time");
+            Transform dateObj = reticleLabelContainer.transform.Find("DayYear");
+            
+            if (timeObj != null)
+            {
+                reticleTimeText = timeObj.GetComponent<TMPro.TextMeshPro>();
+            }
+            
+            if (dateObj != null)
+            {
+                reticleDateText = dateObj.GetComponent<TMPro.TextMeshPro>();
+            }
+            
+            // Fallback: if children not found, check the root object
+            if (reticleTimeText == null)
+            {
+                reticleTimeText = reticleLabelContainer.GetComponent<TMPro.TextMeshPro>();
+                if (reticleTimeText != null)
+                {
+                    DebugLog("Found TextMeshPro on root of time label prefab (expected child 'Time')");
+                }
+            }
+        }
         
         DebugLog("Selection indicator initialized");
     }
@@ -473,6 +529,22 @@ public class TimelineController : MonoBehaviour
         
         selectionIndicator.transform.position = centerPosition;
         selectionIndicator.transform.rotation = centerRotation;
+        
+        // Update Time Text
+        if (reticleTimeText != null || reticleDateText != null)
+        {
+             DateTime centerTime = GetCenterTimestamp();
+             
+             if (reticleTimeText != null)
+             {
+                 reticleTimeText.text = centerTime.ToString("HH:mm:ss");
+             }
+             
+             if (reticleDateText != null)
+             {
+                 reticleDateText.text = centerTime.ToString("MMM dd yyyy");
+             }
+        }
     }
     
     void UpdateReticlePositions()
@@ -994,6 +1066,23 @@ public class TimelineController : MonoBehaviour
         if (enableDebugLogs)
         {
             Debug.Log($"[Timeline] {message}");
+        }
+    }
+    
+    void OnValidate()
+    {
+        if (Application.isPlaying && selectionIndicator != null)
+        {
+            // Update visual configuration dynamically
+            selectionIndicator.SetRadius(selectionFillRadius);
+            selectionIndicator.SetColor(selectionFillColor);
+            selectionIndicator.ConfigureStaticRing(staticRingRadius, staticRingThickness, staticRingColor);
+            selectionIndicator.ConfigureReticleLines(lineStartOffset, lineLength, lineWidth, lineColor);
+            
+            if (reticleLabelContainer != null)
+            {
+                reticleLabelContainer.transform.localPosition = reticleTextOffset;
+            }
         }
     }
     

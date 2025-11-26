@@ -424,9 +424,16 @@ MonoBehaviour:
   pinchManager: {fileID: 394292990}
   eventManager: {fileID: 345928720}
   proximityThresholdDegrees: 5
-  selectionFillRadius: 0.05
+  selectionFillRadius: 0.04
   selectionFillColor: {r: 1, g: 1, b: 1, a: 0.8}
   selectionFillDuration: 2.2
+  staticRingRadius: 0.02
+  staticRingThickness: 0.004
+  staticRingColor: {r: 1, g: 1, b: 1, a: 0.20392157}
+  lineStartOffset: 0.05
+  lineLength: 0.12
+  lineWidth: 0.0065
+  lineColor: {r: 1, g: 1, b: 1, a: 0.29803923}
   tickPrefab: {fileID: 9204507737298005678, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
   targetTickCount: 1000
   instancedMaterial: {fileID: 2100000, guid: e2f3dfe883e085a4f95a857cc8c91f6a, type: 2}
@@ -438,6 +445,8 @@ MonoBehaviour:
   upperReticleOffset: 0.06
   lowerReticleOffset: -0.06
   reticleHeightMultiplier: 5.5
+  reticleTimeLabelPrefab: {fileID: 4847520129325279723, guid: 0cebe4977c61885418608b84453bea1e, type: 3}
+  reticleTextOffset: {x: 0, y: 0.2, z: 0}
   enableDebugLogs: 1
 --- !u!4 &345928718
 Transform:
@@ -520,6 +529,9 @@ MonoBehaviour:
     randomizePosition: 0
     splatIndex: 2
   createExampleEvents: 1
+  proximityRange: 0.2
+  maxAdditionalScale: 1.2
+  maxAdditionalDistance: 0.08
   eventMarkerLineThickness: 0.002
   lineEndpointOffset: 0.01
 --- !u!114 &345928721
@@ -2229,6 +2241,9 @@ MonoBehaviour:
   maxDistanceFromTimeline: 0.2
   baseBallScale: 0.004
   dynamicScaleFactor: 8
+  proximityRange: 0.2
+  maxAdditionalScale: 1.2
+  maxAdditionalDistance: 0.08
   baseDensityThreshold: 9000
   referenceZoomSeconds: 300000
   densityScalingPower: 0.5
