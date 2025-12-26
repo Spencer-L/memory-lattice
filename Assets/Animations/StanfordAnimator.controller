@@ -46,7 +46,7 @@ AnimatorState:
   m_MirrorParameterActive: 0
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
-  m_Motion: {fileID: 7400000, guid: 3cea4fe73ab7cbe48af83be7dfa495ff, type: 2}
+  m_Motion: {fileID: 7400000, guid: f52945f75ee734846b1367709636f8dd, type: 2}
   m_Tag: 
   m_SpeedParameter: 
   m_MirrorParameter: 
@@ -83,7 +83,7 @@ AnimatorController:
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
-  m_Name: MemoryAnimator
+  m_Name: StanfordAnimator
   serializedVersion: 5
   m_AnimatorParameters:
   - m_Name: IsClosed
@@ -126,7 +126,7 @@ AnimatorState:
   m_MirrorParameterActive: 0
   m_CycleOffsetParameterActive: 0
   m_TimeParameterActive: 0
-  m_Motion: {fileID: 7400000, guid: a78569e882b43694bb617893bfae996a, type: 2}
+  m_Motion: {fileID: 7400000, guid: 74306d441f1a1c84885fefa18382d292, type: 2}
   m_Tag: 
   m_SpeedParameter: 
   m_MirrorParameter: 

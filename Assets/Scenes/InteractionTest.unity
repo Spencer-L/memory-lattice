@@ -226,9 +226,17 @@ MonoBehaviour:
   scrollSensitivity: 1
   pinchManager: {fileID: 394292990}
   eventManager: {fileID: 0}
-  proximityThresholdSeconds: 30
+  proximityThresholdDegrees: 10
   selectionFillRadius: 0.05
   selectionFillColor: {r: 0, g: 1, b: 1, a: 0.8}
+  selectionFillDuration: 5
+  staticRingRadius: 0.05
+  staticRingThickness: 0.002
+  staticRingColor: {r: 1, g: 1, b: 1, a: 0.3}
+  lineStartOffset: 0.03
+  lineLength: 0.05
+  lineWidth: 0.002
+  lineColor: {r: 1, g: 1, b: 1, a: 0.5}
   tickPrefab: {fileID: 9204507737298005678, guid: e770d766bf4b4f148889be769a3fa536, type: 3}
   targetTickCount: 1000
   instancedMaterial: {fileID: 2100000, guid: e2f3dfe883e085a4f95a857cc8c91f6a, type: 2}
@@ -240,6 +248,8 @@ MonoBehaviour:
   upperReticleOffset: 0.15
   lowerReticleOffset: -0.15
   reticleHeightMultiplier: 1.5
+  reticleTimeLabelPrefab: {fileID: 0}
+  reticleTextOffset: {x: 0, y: 0.08, z: 0}
   enableDebugLogs: 1
 --- !u!4 &345928718
 Transform:
@@ -445,6 +455,10 @@ PrefabInstance:
       propertyPath: _centerEyeCamera
       value: 
       objectReference: {fileID: 720765152}
+    - target: {fileID: 702507761490558278, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
     - target: {fileID: 2336446269904782542, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _leftEyeAnchor
       value: 
@@ -457,6 +471,10 @@ PrefabInstance:
       propertyPath: _centerEyeCamera
       value: 
       objectReference: {fileID: 720765152}
+    - target: {fileID: 3469981918431717162, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 31321ba15b8f8eb4c954353edc038b1d, type: 2}
     - target: {fileID: 4148778239110795873, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: m_Name
       value: '[BuildingBlock] OVRInteractionComprehensive'
@@ -509,10 +527,18 @@ PrefabInstance:
       propertyPath: _playerOrigin
       value: 
       objectReference: {fileID: 1735784584}
+    - target: {fileID: 6064490830173670506, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
     - target: {fileID: 6267690530596161800, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
       propertyPath: _ovrCameraRig
       value: 
       objectReference: {fileID: 1735784582}
+    - target: {fileID: 7904225791563683334, guid: 0a7d2469f24041c4284c66706f84c45e, type: 3}
+      propertyPath: 'm_Materials.Array.data[0]'
+      value: 
+      objectReference: {fileID: 2100000, guid: 9dfc825aed78fcd4ba02077103263b40, type: 2}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
@@ -2162,12 +2188,16 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::BallsManager
   timelineController: {fileID: 0}
+  timelineEventManager: {fileID: 0}
   ballPrefab: {fileID: 0}
   totalBallCount: 1000
   minDistanceFromTimeline: 0.2
   maxDistanceFromTimeline: 0.8
   baseBallScale: 0.02
   dynamicScaleFactor: 1
+  proximityRange: 1.5
+  maxAdditionalScale: 1
+  maxAdditionalDistance: 0.5
   baseDensityThreshold: 50
   referenceZoomSeconds: 300
   densityScalingPower: 0.7
@@ -2182,6 +2212,11 @@ MonoBehaviour:
   - {r: 1, g: 0.8352941, b: 0, a: 1}
   - {r: 1, g: 0.41568628, b: 0, a: 1}
   initialPoolSize: 100
+  enableBallLineRenderers: 1
+  lineThicknessFactor: 0.5
+  fallbackLineThickness: 0.001
+  lineEndpointOffset: 0.02
+  ballLineColor: {r: 1, g: 1, b: 1, a: 0.5}
   enableDebugLogs: 1
 --- !u!1 &1735784579
 GameObject:

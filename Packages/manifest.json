@@ -1,6 +1,6 @@
 {
   "dependencies": {
-    "com.meta.xr.sdk.all": "81.0.0",
+    "com.meta.xr.sdk.all": "83.0.1",
     "com.normalvr.normcore": "2.17.3",
     "com.unity.ai.navigation": "2.0.9",
     "com.unity.collab-proxy": "2.9.3",
@@ -15,7 +15,7 @@
     "com.unity.ugui": "2.0.0",
     "com.unity.visualscripting": "1.9.7",
     "com.unity.xr.openxr": "1.15.1",
-    "org.nesnausk.gaussian-splatting": "file:C:/UnityProjects/org.nesnausk.gaussian-splatting-1.1.1/package",
+    "org.nesnausk.gaussian-splatting": "file:C:/Users/unico/Documents/Packages/UnityGaussianSplatting-1.1.1/UnityGaussianSplatting-1.1.1/package",
     "com.unity.modules.accessibility": "1.0.0",
     "com.unity.modules.ai": "1.0.0",
     "com.unity.modules.androidjni": "1.0.0",
